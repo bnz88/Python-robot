@@ -1,0 +1,8 @@
+{
+  "panel_host": "0.0.0.0",
+  "panel_port": 5000,
+  "secret_key": "CHANGE_ME_long_random_secret",
+  "db_path": "panel.db",
+  "admin_username": "admin",
+  "admin_password": "CHANGE_ME"
+}

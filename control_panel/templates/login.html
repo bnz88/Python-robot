@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Banking Control Panel - Login</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login-body">
+  <form class="login-card" method="post" action="{{ url_for('login') }}">
+    <h1>Banking Control Panel</h1>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <div class="field"><span class="fl">Username</span>
+      <input type="text" name="username" autocomplete="username" required autofocus>
+    </div>
+    <div class="field"><span class="fl">Password</span>
+      <input type="password" name="password" autocomplete="current-password" required>
+    </div>
+    <div class="field"><span class="fl"></span><button type="submit">Sign in</button></div>
+  </form>
+</body>
+</html>

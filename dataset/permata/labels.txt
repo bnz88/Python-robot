@@ -1,0 +1,29 @@
+# PERMATA captcha labeled dataset.
+# One sample per line: <filename><TAB><text>  (exact case, e.g. sf4H)
+# Files live in dataset/permata/images/. Lines starting with # are ignored.
+# Used by tools/permata_font_id.py and tools/permata_eval.py.
+#
+# Example rows (replace with your own image files and exact-case labels,
+# separated by a single TAB character):
+# 0001.png	sf4H
+# 0002.png	RfGL
+# 0003.png	njb7
+# 0004.png	9XCh
+captcha1.JPG	Kyp4
+captcha2.JPG	3EAK
+captcha3.JPG	4Nk2
+captcha4.JPG	CTbt
+captcha5.JPG	QNhQ
+captcha6.JPG	NCNY
+captcha7.JPG	zLKs
+captcha8.JPG	KPQQ
+captcha9.JPG	KkxG
+captcha10.JPG	yLZt
+captcha11.JPG	QFRK
+captcha12.JPG	2Qdg
+captcha13.JPG	EjZp
+captcha14.JPG	4PGG
+captcha15.JPG	hQbp
+captcha16.JPG	pHPL
+captcha17.JPG	3sJJ
+captcha18.JPG	zzCr

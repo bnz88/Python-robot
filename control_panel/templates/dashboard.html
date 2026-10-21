@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Banking Control Panel</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+{% set active = 'dashboard' %}
+  {% include '_header.html' %}
+
+  <main>
+    <p id="status" class="status"></p>
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Robots</h2>
+        <button class="min-toggle" type="button" title="Minimize">−</button>
+      </div>
+      <table id="robots-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>Address</th><th>Status</th><th>Running</th>
+            <th>PID</th><th>Proxy</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <details class="add-robot">
+        <summary>Add robot</summary>
+        <form id="add-robot-form">
+          <div class="field"><span class="fl">Name</span>
+            <input name="name" placeholder="name" required>
+          </div>
+          <div class="field"><span class="fl">Host</span>
+            <input name="host" placeholder="host" required>
+          </div>
+          <div class="field"><span class="fl">Port</span>
+            <input name="port" type="number" placeholder="port" required>
+          </div>
+          <div class="field"><span class="fl">Token</span>
+            <input name="token" placeholder="robot token">
+          </div>
+          <div class="field"><span class="fl">Proxy</span>
+            <select name="proxy_id" class="proxy-select" title="proxy">
+              <option value="">proxy: none</option>
+            </select>
+          </div>
+          <div class="field"><span class="fl"></span><button type="submit">Add</button></div>
+        </form>
+      </details>
+    </section>
+
+    <section class="panel" id="robot-controls" hidden>
+      <div class="panel-head">
+        <h2>Selected robot: <span id="selected-name"></span></h2>
+        <button class="min-toggle" type="button" title="Minimize">−</button>
+      </div>
+      <div id="selected-status" class="acc-status"></div>
+      <div class="controls">
+        <div class="field"><span class="fl">Proxy</span>
+          <select id="proxy-select" class="proxy-select" title="proxy">
+            <option value="">none (use robot default)</option>
+          </select>
+        </div>
+        <div class="field"><span class="fl">Account</span>
+          <select id="account-select">
+            <option value="">all</option>
+            <option value="mybca">mybca</option>
+            <option value="klikbca">klikbca</option>
+            <option value="cimb">cimb</option>
+            <option value="permata">permata</option>
+          </select>
+        </div>
+        <div class="field">
+          <span class="fl"></span>
+          <button id="start-btn" class="primary">Start</button>
+          <button id="stop-btn">Stop</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2 id="accounts-title">Accounts</h2>
+        <button class="min-toggle" type="button" title="Minimize">−</button>
+      </div>
+      <table id="accounts-table">
+        <thead>
+          <tr>
+            <th>Label</th><th>Bank</th><th>Unique ID</th><th>Shortname</th><th>Enabled</th>
+            <th>Output</th><th>Last scrape</th><th>Omitted</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2 id="log-title">Log</h2>
+        <button class="min-toggle" type="button" title="Minimize">−</button>
+      </div>
+      <div class="log-toolbar">
+        <button id="log-refresh">Refresh</button>
+        <label>lines <input id="log-lines" type="number" value="200" min="1"></label>
+        <label><input id="log-auto" type="checkbox" checked> auto</label>
+      </div>
+      <pre id="log-pane"></pre>
+    </section>
+  </main>
+
+  <dialog id="edit-dialog">
+    <form id="edit-form">
+      <h3>Edit robot</h3>
+      <input type="hidden" name="id">
+      <div class="field"><span class="fl">Name</span><input name="name"></div>
+      <div class="field"><span class="fl">Host</span><input name="host"></div>
+      <div class="field"><span class="fl">Port</span><input name="port" type="number"></div>
+      <div class="field"><span class="fl">Token</span><input name="token"></div>
+      <div class="field"><span class="fl">Proxy</span>
+        <select name="proxy_id" class="proxy-select">
+          <option value="">none</option>
+        </select>
+      </div>
+      <div class="dialog-actions">
+        <button type="submit">Save</button>
+        <button type="button" id="edit-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="statement-dialog">
+    <div class="statement-head">
+      <h3>Statement</h3>
+      <button id="statement-close">&times;</button>
+    </div>
+    <pre id="statement-body"></pre>
+  </dialog>
+
+  <script src="{{ url_for('static', filename='common.js') }}"></script>
+  <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+</body>
+</html>

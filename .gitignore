@@ -1,0 +1,14 @@
+accounts.json
+config.json
+output/
+__pycache__/
+*.pyc
+control_panel/panel.db
+assets/*.png
+assets/klikbca/*.png
+assets/mybca/*.png
+dataset/permata/misses/
+
+.venv/
+run_robot.cmd
+run_panel.cmd

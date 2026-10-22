@@ -295,11 +295,11 @@ class Permata:
     def _open_statement(self):
         """Scroll to the statement flag, then click it to load mutations.
 
-        The flag usually sits below the fold, so the page is scrolled down
-        ``permata_scroll_step_px`` pixels at a time (default 100) up to
-        ``permata_scroll_max_steps`` times until the image appears. Best-effort:
-        when it is not found the flow logs it and continues to the statement
-        wait.
+        The flag sits below the fold and this page ignores the mouse wheel, so
+        the driver scrolls one page at a time with ``PageDown`` (falling back to
+        the wheel and arrow keys), up to ``permata_scroll_max_steps`` steps,
+        until the image appears. Best-effort: when it is not found the flow logs
+        it and continues to the statement wait.
         """
         image = self.config.get("permata_ind_flag", "ind_flag.JPG")
         step = self.config.get("permata_scroll_step_px", 100)

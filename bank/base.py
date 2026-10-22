@@ -684,8 +684,8 @@ class ChromeDriver:
                 break
             moved_before = True
             log(
-                "[{}] scrolled down {}px via {} (step {}/{}) looking for {}".format(
-                    self.bank_name, step * index, method, index, max_steps, name
+                "[{}] scrolled via {} (step {}/{}) looking for {}".format(
+                    self.bank_name, method, index, max_steps, name
                 )
             )
             center, score = self.locate_image(
@@ -699,11 +699,12 @@ class ChromeDriver:
     def scroll_page(self, direction=1, step_px=100, method=None, wheel_px=100):
         """Scroll the visible page by about *step_px* and confirm it moved.
 
-        Pages differ in which element owns the scrollbar (the body, an inner
-        panel, an iframe), so the mouse wheel is tried over a few points and
-        then the keyboard. *direction* is +1 down, -1 up. The name of the
-        method that actually moved the page is returned (``wheel``,
-        ``pagedown``/``pageup`` or ``arrows``), or ``None`` when nothing moved.
+        ``PageDown`` is the primary method (the PERMATA statement page ignores
+        the mouse wheel but scrolls from the keyboard), followed by the wheel
+        over a few points and finally the arrow keys. *direction* is +1 down,
+        -1 up. The name of the method that actually moved the page is returned
+        (``pagedown``/``pageup``, ``wheel`` or ``arrows``), or ``None`` when
+        nothing moved.
 
         *method* is the previous successful method; it is retried first so the
         remaining steps stay fast.
@@ -721,40 +722,46 @@ class ChromeDriver:
             time.sleep(self.config["delay_short"])
             return self._screen_signature() != before
 
-        if method in (page_key, "arrows"):
+        def press_page():
             try:
-                if method == "arrows":
-                    pyautogui.press(arrow_key, presses=arrow_presses)
-                else:
-                    self.ensure_foreground()
-                    pyautogui.press(page_key)
+                pyautogui.press(page_key)
+                return moved()
+            except Exception:
+                return False
+
+        def press_arrows():
+            try:
+                pyautogui.press(arrow_key, presses=arrow_presses)
+                return moved()
+            except Exception:
+                return False
+
+        def press_wheel():
+            for x, y in (
+                (width // 2, height // 2),
+                (int(width * 0.3), height // 2),
+                (width // 2, int(height * 0.75)),
+            ):
+                try:
+                    pyautogui.scroll(clicks, x=x, y=y)
+                except Exception:
+                    continue
                 if moved():
-                    return method
-            except Exception:
-                pass
+                    return True
+            return False
 
-        for x, y in (
-            (width // 2, height // 2),
-            (int(width * 0.3), height // 2),
-            (width // 2, int(height * 0.75)),
-        ):
-            try:
-                pyautogui.scroll(clicks, x=x, y=y)
-            except Exception:
-                continue
-            if moved():
-                return "wheel"
+        self.focus_page()
+        if method == page_key and press_page():
+            return page_key
+        if method == "arrows" and press_arrows():
+            return "arrows"
 
-        try:
-            self.ensure_foreground()
-            pyautogui.press(page_key)
-            if moved():
-                return page_key
-            pyautogui.press(arrow_key, presses=arrow_presses)
-            if moved():
-                return "arrows"
-        except Exception:
-            pass
+        if press_page():
+            return page_key
+        if press_wheel():
+            return "wheel"
+        if press_arrows():
+            return "arrows"
         return None
 
     def _screen_signature(self):
@@ -765,10 +772,25 @@ class ChromeDriver:
         except Exception:
             return b""
 
+    def focus_page(self):
+        """Give the web content keyboard focus without clicking on the page.
+
+        F6 moves focus to the address bar and Escape returns it to the page, so
+        a PageDown reaches the document instead of the omnibox or a toolbar.
+        """
+        self.ensure_foreground()
+        try:
+            pyautogui.press("f6")
+            time.sleep(0.15)
+            pyautogui.press("esc")
+            time.sleep(0.15)
+        except Exception:
+            pass
+
     def scroll_to_top(self):
         """Scroll the focused page back to the top, without touching the mouse."""
         try:
-            self.ensure_foreground()
+            self.focus_page()
             pyautogui.hotkey("ctrl", "home")
             time.sleep(self.config["delay_short"])
             return True

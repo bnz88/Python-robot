@@ -54,6 +54,7 @@ CONFIG_SCHEMA = [
             {"key": "window_width", "label": "Window width (px)", "type": "int", "default": 1280},
             {"key": "window_height", "label": "Window height (px)", "type": "int", "default": 900},
             {"key": "chrome_maximized", "label": "Open Chrome maximized", "type": "bool", "default": True, "help": "Maximize Chrome on every scrape. Window width/height are used only when this is off."},
+            {"key": "close_existing_chrome", "label": "Close running Chrome first", "type": "bool", "default": True, "help": "Close every Chrome process on the robot machine before launching the scraper's Chrome, so no stray window steals the focus."},
             {"key": "window_title_hint", "label": "Window title hint", "type": "text", "default": "Google Chrome"},
             {"key": "output_dir", "label": "Output directory", "type": "text", "default": "output"},
             {"key": "live_capture", "label": "Live screen feed", "type": "bool", "default": True, "help": "Capture the desktop to output/live/frame.jpg while the scraper runs."},

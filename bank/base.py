@@ -75,6 +75,10 @@ class ChromeDriver:
     # ---------------------------------------------------------------- lifecycle
     def launch(self, url):
         """Start Chrome with a fresh profile, maximized unless configured otherwise."""
+        # A Chrome left open by the operator sits in front of the scraper's
+        # window, steals the foreground and breaks the keyboard macros, so any
+        # existing instance is closed first (config: close_existing_chrome).
+        self.close_existing_chrome()
         self.profile_dir = tempfile.mkdtemp(prefix="bca_bot_profile_")
         self._seed_no_password_manager()
         width, height = self.window_geometry()
@@ -140,6 +144,59 @@ class ChromeDriver:
         self.focus()
         if maximized:
             self.maximize()
+
+    def _count_processes(self, image_name):
+        """Number of running processes with this image name (0 on failure)."""
+        try:
+            output = subprocess.check_output(
+                ["tasklist", "/FI", "IMAGENAME eq {}".format(image_name), "/NH"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+                errors="replace",
+            )
+        except Exception:
+            return 0
+        needle = image_name.lower()
+        return sum(1 for line in output.splitlines() if needle in line.lower())
+
+    def close_existing_chrome(self):
+        """Close every running Chrome so no stray window hinders the scraper.
+
+        The scraper always opens its own Chrome with a temporary profile; an
+        operator's Chrome would be another window competing for the foreground,
+        which breaks the mouse/keyboard macros. Controlled by the
+        ``close_existing_chrome`` setting (default on).
+        """
+        if os.name != "nt" or not self.config.get("close_existing_chrome", True):
+            return 0
+        running = self._count_processes("chrome.exe")
+        if running <= 0:
+            return 0
+        log(
+            "[{}] closing {} running Chrome process(es) before launch".format(
+                self.bank_name, running
+            )
+        )
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/IM", "chrome.exe"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except Exception as exc:
+            log("[{}] closing existing Chrome failed: {}".format(self.bank_name, exc))
+            return running
+        # Give Windows a moment to destroy the windows and release the desktop.
+        time.sleep(1.0)
+        remaining = self._count_processes("chrome.exe")
+        if remaining:
+            log(
+                "[{}] {} Chrome process(es) are still running after taskkill".format(
+                    self.bank_name, remaining
+                )
+            )
+        return running
 
     def window_geometry(self):
         """Return the (width, height) the Chrome window occupies."""
@@ -665,7 +722,11 @@ class ChromeDriver:
         moved_before = False
         for index in range(1, max_steps + 1):
             method = self.scroll_page(
-                direction=1, step_px=step, method=method, wheel_px=wheel_px
+                direction=1,
+                step_px=step,
+                method=method,
+                wheel_px=wheel_px,
+                allow_click=not moved_before,
             )
             if method is None:
                 if moved_before:
@@ -696,15 +757,17 @@ class ChromeDriver:
                 return center, best
         return None, best
 
-    def scroll_page(self, direction=1, step_px=100, method=None, wheel_px=100):
+    def scroll_page(self, direction=1, step_px=100, method=None, wheel_px=100, allow_click=False):
         """Scroll the visible page by about *step_px* and confirm it moved.
 
         ``PageDown`` is the primary method (the PERMATA statement page ignores
         the mouse wheel but scrolls from the keyboard), followed by the wheel
-        over a few points and finally the arrow keys. *direction* is +1 down,
-        -1 up. The name of the method that actually moved the page is returned
-        (``pagedown``/``pageup``, ``wheel`` or ``arrows``), or ``None`` when
-        nothing moved.
+        over a few points and the arrow keys. If the keyboard does nothing the
+        page is clicked once to give the document focus and ``PageDown`` is
+        retried — the same sequence a person uses by hand. *direction* is +1
+        down, -1 up. The name of the method that actually moved the page is
+        returned (``pagedown``/``pageup``, ``wheel`` or ``arrows``), or ``None``
+        when nothing moved.
 
         *method* is the previous successful method; it is retried first so the
         remaining steps stay fast.
@@ -750,7 +813,7 @@ class ChromeDriver:
                     return True
             return False
 
-        self.focus_page()
+        self.ensure_foreground()
         if method == page_key and press_page():
             return page_key
         if method == "arrows" and press_arrows():
@@ -758,6 +821,22 @@ class ChromeDriver:
 
         if press_page():
             return page_key
+
+        if allow_click:
+            # The keyboard went nowhere at the very first step: the document
+            # may not have focus (address bar or another control). Click the
+            # content once and try PageDown again, like the manual workaround.
+            try:
+                self.click_at((width // 2, height // 2))
+                log(
+                    "[{}] page did not react to the keyboard; clicked it to "
+                    "focus and retried PageDown".format(self.bank_name)
+                )
+            except Exception:
+                pass
+            if press_page():
+                return page_key
+
         if press_wheel():
             return "wheel"
         if press_arrows():
@@ -772,25 +851,10 @@ class ChromeDriver:
         except Exception:
             return b""
 
-    def focus_page(self):
-        """Give the web content keyboard focus without clicking on the page.
-
-        F6 moves focus to the address bar and Escape returns it to the page, so
-        a PageDown reaches the document instead of the omnibox or a toolbar.
-        """
-        self.ensure_foreground()
-        try:
-            pyautogui.press("f6")
-            time.sleep(0.15)
-            pyautogui.press("esc")
-            time.sleep(0.15)
-        except Exception:
-            pass
-
     def scroll_to_top(self):
         """Scroll the focused page back to the top, without touching the mouse."""
         try:
-            self.focus_page()
+            self.ensure_foreground()
             pyautogui.hotkey("ctrl", "home")
             time.sleep(self.config["delay_short"])
             return True

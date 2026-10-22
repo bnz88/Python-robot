@@ -32,9 +32,9 @@ so no WebDriver fingerprint is exposed.
 > icon is not found the account is aborted (nothing saved, cooldown cleared, next
 > account). On success it opens the statement URL, finds the `ind_flag.JPG` flag —
 > the page ignores the mouse wheel, so it scrolls one screen at a time with
-> `PageDown` (falling back to the wheel and arrow keys), up to
-> `permata_scroll_max_steps` (20) times, and verifies the page actually moved
-> before each probe — then
+> `PageDown` (falling back to clicking the page once and re-trying `PageDown`,
+> then the wheel and arrow keys), up to `permata_scroll_max_steps` (20) times,
+> and verifies the page actually moved before each probe — then
 > clicks it, captures the statement, and logs out via the user icon +
 > `logout_btn_permata.JPG`.
 > If a logout image is not found the account is not saved (cooldown cleared, next
@@ -91,6 +91,10 @@ missing.
      `window_width` / `window_height` are then only a fallback for coordinates;
      reference images are matched against the real window, so recapture the assets
      (`python main.py --capture`) if a different window size breaks the matches.
+   - `close_existing_chrome` — close every running Chrome on the robot machine
+     before launching the scraper's browser (default `true`). Another Chrome window
+     competes for the foreground and breaks the keyboard/mouse macros. Do not view
+     the control panel in Chrome on the robot machine — use another PC or Edge.
    - `tabs_to_username` — number of Tab presses to reach the username field after focusing the page (1 by default; tune per site if login types into the wrong field).
    - `image_confidence` — OpenCV match threshold for the submit/menu buttons.
    - `between_accounts_wait` — seconds to wait after closing Chrome before the next account starts.

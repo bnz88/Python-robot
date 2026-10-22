@@ -3,6 +3,7 @@
   "window_width": 1280,
   "window_height": 900,
   "chrome_maximized": true,
+  "close_existing_chrome": true,
   "user_data_dir": "",
   "delay_short": 0.5,
   "delay_long": 2.5,

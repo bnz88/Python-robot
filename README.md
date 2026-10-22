@@ -95,6 +95,12 @@ missing.
      before launching the scraper's browser (default `true`). Another Chrome window
      competes for the foreground and breaks the keyboard/mouse macros. Do not view
      the control panel in Chrome on the robot machine — use another PC or Edge.
+   - `chrome_scale` — device scale factor for the scraper's Chrome (`1.0` = 100 %,
+     `0.75` = zoomed out to 75 %). It is passed as
+     `--force-device-scale-factor` and scales the page as well as the browser UI,
+     so changing it requires recapturing the reference images. Useful when the
+     robot desktop is smaller than the screen the assets were captured on
+     (e.g. a 1024×768 console vs a 1262×770 RDP session).
    - `tabs_to_username` — number of Tab presses to reach the username field after focusing the page (1 by default; tune per site if login types into the wrong field).
    - `image_confidence` — OpenCV match threshold for the submit/menu buttons.
    - `between_accounts_wait` — seconds to wait after closing Chrome before the next account starts.

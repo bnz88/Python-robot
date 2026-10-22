@@ -4,6 +4,7 @@
   "window_height": 900,
   "chrome_maximized": true,
   "close_existing_chrome": true,
+  "chrome_scale": 1.0,
   "user_data_dir": "",
   "delay_short": 0.5,
   "delay_long": 2.5,

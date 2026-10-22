@@ -95,6 +95,9 @@ class ChromeDriver:
             args.append("--start-maximized")
         else:
             args.append("--window-size={},{}".format(width, height))
+        scale_arg = self._chrome_scale_arg()
+        if scale_arg:
+            args.append(scale_arg)
         args += [
             "--window-position=0,0",
             "--no-first-run",
@@ -112,10 +115,13 @@ class ChromeDriver:
         if proxy_ip and proxy_port:
             args.append("--proxy-server=http://{}:{}".format(proxy_ip, proxy_port))
         args.append(url)
+        mode = "maximized" if maximized else "{}x{}".format(width, height)
+        if scale_arg:
+            mode += ", scale {:g}".format(self.chrome_scale())
         log(
             "[{}] launching Chrome ({}): {}".format(
                 self.bank_name,
-                "maximized" if maximized else "{}x{}".format(width, height),
+                mode,
                 url,
             )
         )
@@ -197,6 +203,23 @@ class ChromeDriver:
                 )
             )
         return running
+
+    def chrome_scale(self):
+        """Configured Chrome device scale factor (1.0 = 100 %, 0.75 = zoomed out)."""
+        try:
+            scale = float(self.config.get("chrome_scale", 1.0))
+        except (TypeError, ValueError):
+            return 1.0
+        if scale <= 0:
+            return 1.0
+        return scale
+
+    def _chrome_scale_arg(self):
+        """``--force-device-scale-factor`` flag, or None for the default scale."""
+        scale = self.chrome_scale()
+        if abs(scale - 1.0) < 0.001:
+            return None
+        return "--force-device-scale-factor={:g}".format(scale)
 
     def window_geometry(self):
         """Return the (width, height) the Chrome window occupies."""

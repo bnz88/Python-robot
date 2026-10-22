@@ -67,6 +67,10 @@ class ChromeDriver:
         self.last_captcha = None
         # Whether the screenshot->mouse coordinate scale was already reported.
         self._scale_logged = False
+        # Whether the "window not found by pid" warning was already reported.
+        self._handles_warned = False
+        # Window handles of the Chrome instance this driver launched.
+        self._own_handles = []
 
     # ---------------------------------------------------------------- lifecycle
     def launch(self, url):
@@ -111,8 +115,28 @@ class ChromeDriver:
                 url,
             )
         )
+        # Windows that already existed before the launch, so the scraper's own
+        # Chrome window can be identified by diffing afterwards.
+        existing_handles = set(self._caption_handles())
         self.process = subprocess.Popen(args)
         time.sleep(self.config["page_load_wait"])
+        new_handles = [
+            hwnd for hwnd in self._caption_handles() if hwnd not in existing_handles
+        ]
+        own = [hwnd for hwnd in new_handles if self._window_pid(hwnd) == self.process.pid]
+        self._own_handles = own or new_handles
+        if self._own_handles:
+            log(
+                "[{}] tracking Chrome window(s): {}".format(
+                    self.bank_name,
+                    ", ".join(repr(self._window_title(h)) for h in self._own_handles),
+                )
+            )
+        else:
+            log(
+                "[{}] could not spot the new Chrome window after launch; "
+                "falling back to process/title matching".format(self.bank_name)
+            )
         self.focus()
         if maximized:
             self.maximize()
@@ -213,15 +237,81 @@ class ChromeDriver:
         if self.profile_dir and os.path.isdir(self.profile_dir):
             shutil.rmtree(self.profile_dir, ignore_errors=True)
             self.profile_dir = None
+        self._own_handles = []
 
     # ---------------------------------------------------------------- focus/nav
-    def _window_handles(self):
-        """Visible top-level window handles owned by the Chrome we started.
+    def _window_title(self, hwnd):
+        """Title of one window handle ('' when unavailable)."""
+        try:
+            user32 = ctypes.windll.user32
+            length = user32.GetWindowTextLengthW(hwnd)
+            buffer = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buffer, length + 1)
+            return buffer.value
+        except Exception:
+            return ""
 
-        Title matching (``getWindowsWithTitle``) also finds the operator's own
-        Chrome/panel window, so windows are selected by process id instead.
+    def _window_pid(self, hwnd):
+        """Process id that owns a window handle (0 when unavailable)."""
+        try:
+            from ctypes import wintypes
+
+            pid = wintypes.DWORD()
+            ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            return pid.value
+        except Exception:
+            return 0
+
+    def _caption_handles(self):
+        """Visible top-level windows that carry a title bar, for any process."""
+        if os.name != "nt":
+            return []
+        try:
+            from ctypes import wintypes
+        except Exception:
+            return []
+        user32 = ctypes.windll.user32
+        handles = []
+        callback_type = ctypes.WINFUNCTYPE(
+            wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
+        )
+
+        def callback(hwnd, _lparam):
+            if user32.IsWindowVisible(hwnd) and user32.GetWindowLongW(
+                hwnd, -16
+            ) & 0x00C00000:
+                handles.append(hwnd)
+            return True
+
+        try:
+            user32.EnumWindows(callback_type(callback), 0)
+        except Exception:
+            return []
+        return handles
+
+    def _window_handles(self):
+        """Visible top-level window handles of the Chrome instance we launched.
+
+        The window is remembered from the launch (handles that appeared while
+        Chrome started), because Chrome does not always keep the process we
+        spawned as the window owner. Process id and finally title matching are
+        used as fallbacks, and title matching alone also finds the operator's
+        own Chrome, hence it is last.
         """
-        if os.name != "nt" or self.process is None:
+        if os.name != "nt":
+            return []
+        if self._own_handles:
+            user32 = ctypes.windll.user32
+            alive = []
+            for hwnd in self._own_handles:
+                try:
+                    if user32.IsWindow(hwnd) and user32.IsWindowVisible(hwnd):
+                        alive.append(hwnd)
+                except Exception:
+                    alive.append(hwnd)
+            if alive:
+                return alive
+        if self.process is None:
             return []
         try:
             from ctypes import wintypes
@@ -302,10 +392,28 @@ class ChromeDriver:
             pass
         return True
 
+    def _foreground_window_title(self):
+        """Title of the current foreground window ('' when unavailable)."""
+        if os.name != "nt":
+            return ""
+        try:
+            hwnd = ctypes.windll.user32.GetForegroundWindow()
+        except Exception:
+            return ""
+        return self._window_title(hwnd) if hwnd else ""
+
     def ensure_foreground(self):
         """Return True when our Chrome window is the active window."""
         handles = self._window_handles()
         if not handles:
+            if not self._handles_warned:
+                self._handles_warned = True
+                log(
+                    "[{}] cannot identify the scraper's Chrome window by process; "
+                    "falling back to title matching (foreground is {!r})".format(
+                        self.bank_name, self._foreground_window_title()
+                    )
+                )
             return True
         try:
             if ctypes.windll.user32.GetForegroundWindow() in handles:
@@ -315,8 +423,8 @@ class ChromeDriver:
         if self.focus():
             return True
         log(
-            "[{}] Chrome window could not be activated; clicks may be ignored".format(
-                self.bank_name
+            "[{}] Chrome window could not be activated; foreground is {!r}".format(
+                self.bank_name, self._foreground_window_title()
             )
         )
         return False
@@ -569,8 +677,8 @@ class ChromeDriver:
                 else:
                     log(
                         "[{}] could not scroll the page while looking for {} "
-                        "(no wheel or key event moved it)".format(
-                            self.bank_name, name
+                        "(no wheel or key event moved it; foreground is {!r})".format(
+                            self.bank_name, name, self._foreground_window_title()
                         )
                     )
                 break

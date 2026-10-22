@@ -2,7 +2,15 @@
 
 import os
 import re
+import sys
 import time
+
+try:
+    # Page titles and account text can contain characters outside the console
+    # code page; logging them must never abort the run.
+    sys.stdout.reconfigure(errors="replace")
+except Exception:
+    pass
 
 _log_file = None
 
@@ -28,7 +36,10 @@ def log(msg):
     """Print a timestamped message, flushing immediately; tee to file if set."""
     stamp = time.strftime("%H:%M:%S")
     line = "[{}] {}".format(stamp, msg)
-    print(line, flush=True)
+    try:
+        print(line, flush=True)
+    except UnicodeEncodeError:
+        print(line.encode("ascii", "replace").decode("ascii"), flush=True)
     if _log_file:
         try:
             with open(_log_file, "a", encoding="utf-8", errors="replace") as f:

@@ -384,3 +384,7 @@ python -m playwright install chromium
 - Tab order and field positions vary by site/locale; adjust `tabs_to_username` and the
   reference images if a field is filled incorrectly.
 - Keep the mouse/keyboard untouched while the script runs.
+- The process enables Windows DPI awareness and maps screenshot pixels to mouse
+  coordinates before clicking, so display scaling (125 %/150 %) no longer shifts
+  clicks. Keep scaling at 100 % where possible and use the same scaling on the
+  machine that captured the reference images.

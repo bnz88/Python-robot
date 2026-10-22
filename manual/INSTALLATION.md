@@ -344,6 +344,7 @@ To undo the setup: `.\deploy\windows-unattended.ps1 -Remove`
 | **auth failed** status | The bank rejected the username/password. Fix the account in the Accounts page. |
 | Nothing is scraped | The robot is online but you have not pressed **Start**, accounts are banned, or all are within the cooldown (default 3 minutes). |
 | Buttons not found / wrong field typed | Re-capture the reference images (Step 8) or adjust `tabs_to_username` in `config.json`. |
+| Image is found but the click does nothing (or lands elsewhere) | Windows display scaling is not 100 %, or another window is in front of Chrome. Set scaling to 100 % on the robot desktop and keep the Chrome window maximized and in front; the log prints `display scaling detected` when a scale correction is applied. |
 | The run stops when you lock the screen | The computer must stay unlocked. On a cloud VM use §6. |
 | Statement file not created | The statement was unchanged, or the backoffice upload failed. See `output\scraper.log`. |
 

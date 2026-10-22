@@ -4,6 +4,7 @@ Uses PyAutoGUI keyboard/mouse macros against a dedicated Chrome instance
 launched via subprocess, so no WebDriver fingerprint is exposed.
 """
 
+import ctypes
 import json
 import os
 import shutil
@@ -15,6 +16,30 @@ import pyautogui
 
 from utils.clipboard import get_clipboard_text
 from utils.output import log
+
+
+def _enable_dpi_awareness():
+    """Put screenshots and mouse coordinates on the same pixel grid (Windows).
+
+    Without this the process is DPI-virtualized: ``pyautogui.screenshot()``
+    returns physical pixels while ``pyautogui.click`` is interpreted in scaled
+    coordinates, so a located image is clicked at the wrong spot. It is most
+    obvious in a maximized window and on a VM whose display scaling is not 100%.
+    """
+    if os.name != "nt":
+        return
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        return
+    except Exception:
+        pass
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+
+_enable_dpi_awareness()
 
 
 class ScrapeAborted(Exception):
@@ -40,6 +65,8 @@ class ChromeDriver:
         # Last located captcha sample (path + solved text) when sample capture
         # is enabled; the bank flow confirms it after a successful login.
         self.last_captcha = None
+        # Whether the screenshot->mouse coordinate scale was already reported.
+        self._scale_logged = False
 
     # ---------------------------------------------------------------- lifecycle
     def launch(self, url):
@@ -107,6 +134,19 @@ class ChromeDriver:
 
     def maximize(self):
         """Maximize the Chrome window (in addition to --start-maximized)."""
+        handles = self._window_handles()
+        if handles:
+            user32 = ctypes.windll.user32
+            maximized = False
+            for hwnd in handles:
+                try:
+                    user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+                    maximized = True
+                except Exception:
+                    continue
+            if maximized:
+                time.sleep(self.config["delay_short"])
+                return True
         hint = self.config.get("window_title_hint", "Google Chrome")
         try:
             for win in reversed(pyautogui.getWindowsWithTitle(hint)):
@@ -175,8 +215,71 @@ class ChromeDriver:
             self.profile_dir = None
 
     # ---------------------------------------------------------------- focus/nav
+    def _window_handles(self):
+        """Visible top-level window handles owned by the Chrome we started.
+
+        Title matching (``getWindowsWithTitle``) also finds the operator's own
+        Chrome/panel window, so windows are selected by process id instead.
+        """
+        if os.name != "nt" or self.process is None:
+            return []
+        try:
+            from ctypes import wintypes
+        except Exception:
+            return []
+        user32 = ctypes.windll.user32
+        pid = self.process.pid
+        handles = []
+        callback_type = ctypes.WINFUNCTYPE(
+            wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
+        )
+
+        def callback(hwnd, _lparam):
+            owner = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+            if owner.value != pid or not user32.IsWindowVisible(hwnd):
+                return True
+            if user32.GetWindowLongW(hwnd, -16) & 0x00C00000:  # WS_CAPTION
+                handles.append(hwnd)
+            return True
+
+        try:
+            user32.EnumWindows(callback_type(callback), 0)
+        except Exception:
+            return []
+        return handles
+
+    def _activate(self, hwnd):
+        """Bring one window to the foreground, retrying the way Windows allows."""
+        user32 = ctypes.windll.user32
+        try:
+            if user32.IsIconic(hwnd):
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            user32.BringWindowToTop(hwnd)
+            user32.SetForegroundWindow(hwnd)
+            time.sleep(self.config["delay_short"])
+            if user32.GetForegroundWindow() == hwnd:
+                return True
+            # Windows can refuse SetForegroundWindow for a background process;
+            # a click on the title bar brings the window forward for good.
+            from ctypes import wintypes
+
+            rect = wintypes.RECT()
+            if user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                x = (rect.left + rect.right) // 2
+                y = max(1, rect.top + 8)
+                pyautogui.click(x, y)
+                time.sleep(self.config["delay_short"])
+                return user32.GetForegroundWindow() == hwnd
+        except Exception:
+            pass
+        return False
+
     def focus(self):
-        """Bring the Chrome window to the foreground by title."""
+        """Bring the scraper's own Chrome window to the foreground."""
+        for hwnd in self._window_handles():
+            if self._activate(hwnd):
+                return True
         hint = self.config.get("window_title_hint", "Google Chrome")
         try:
             for win in reversed(pyautogui.getWindowsWithTitle(hint)):
@@ -199,9 +302,28 @@ class ChromeDriver:
             pass
         return True
 
+    def ensure_foreground(self):
+        """Return True when our Chrome window is the active window."""
+        handles = self._window_handles()
+        if not handles:
+            return True
+        try:
+            if ctypes.windll.user32.GetForegroundWindow() in handles:
+                return True
+        except Exception:
+            return True
+        if self.focus():
+            return True
+        log(
+            "[{}] Chrome window could not be activated; clicks may be ignored".format(
+                self.bank_name
+            )
+        )
+        return False
+
     def goto_url(self, url):
         """Focus the address bar and navigate to *url*."""
-        self.focus()
+        self.ensure_foreground()
         pyautogui.hotkey("ctrl", "l")
         time.sleep(self.config["delay_short"])
         pyautogui.write(url, interval=0.02)
@@ -214,17 +336,19 @@ class ChromeDriver:
             time.sleep(0.15)
 
     def press_enter(self):
+        self.ensure_foreground()
         pyautogui.press("enter")
         time.sleep(self.config["delay_short"])
 
     def type_text(self, text):
+        self.ensure_foreground()
         pyautogui.write(text, interval=0.05)
         time.sleep(self.config["delay_short"])
 
     # ---------------------------------------------------------------- login
     def keyboard_login(self, username, password):
         """Focus the page, Tab to the username field, then type credentials."""
-        self.focus()
+        self.ensure_foreground()
         w = self.config["window_width"]
         h = self.config["window_height"]
         click_x = self.config.get("form_click_x", w // 2)
@@ -239,6 +363,7 @@ class ChromeDriver:
 
     def submit(self, button_image="login_button.png"):
         """Submit via Enter, falling back to an image-matched button click."""
+        self.ensure_foreground()
         pyautogui.press("enter")
         time.sleep(self.config["delay_long"])
         asset = self.asset_path(button_image)
@@ -280,6 +405,38 @@ class ChromeDriver:
         if os.path.isabs(name) or "/" in name or "\\" in name:
             return name
         return os.path.join(self.config["assets_dir"], self.bank_name, name)
+
+    def _mouse_scale(self, shot):
+        """Return (sx, sy) converting screenshot pixels to mouse coordinates.
+
+        Normally both grids match (1.0) once the process is DPI aware; the ratio
+        is applied anyway so a virtualized session cannot shift every click.
+        """
+        try:
+            width, height = shot.size
+            mouse_w, mouse_h = pyautogui.size()
+            if width and height:
+                scale_x = mouse_w / float(width)
+                scale_y = mouse_h / float(height)
+                if not self._scale_logged:
+                    self._scale_logged = True
+                    if abs(scale_x - 1.0) > 0.01 or abs(scale_y - 1.0) > 0.01:
+                        log(
+                            "[{}] display scaling detected: screenshot {}x{} -> "
+                            "mouse {}x{} (applying {:.3f}x{:.3f})".format(
+                                self.bank_name,
+                                width,
+                                height,
+                                mouse_w,
+                                mouse_h,
+                                scale_x,
+                                scale_y,
+                            )
+                        )
+                return scale_x, scale_y
+        except Exception:
+            pass
+        return 1.0, 1.0
 
     def locate_image(self, name, timeout=None, confidence=None, scales=None):
         """Locate an asset image on screen, tolerating a capture scale offset.
@@ -323,7 +480,9 @@ class ChromeDriver:
         deadline = time.time() + timeout
         best = 0.0
         while True:
-            screen = cv2.cvtColor(np.array(pyautogui.screenshot()), cv2.COLOR_RGB2BGR)
+            shot = pyautogui.screenshot()
+            screen = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2BGR)
+            scale_x, scale_y = self._mouse_scale(shot)
             hit = None
             for template in templates:
                 if (
@@ -337,7 +496,10 @@ class ChromeDriver:
                 if max_val >= confidence and (hit is None or max_val > hit[1]):
                     height, width = template.shape[:2]
                     hit = (
-                        (max_loc[0] + width // 2, max_loc[1] + height // 2),
+                        (
+                            int(round((max_loc[0] + width // 2) * scale_x)),
+                            int(round((max_loc[1] + height // 2) * scale_y)),
+                        ),
                         float(max_val),
                     )
             if hit is not None:
@@ -347,7 +509,8 @@ class ChromeDriver:
             time.sleep(0.5)
 
     def click_at(self, point):
-        """Click an absolute screen coordinate (e.g. from ``locate_image``)."""
+        """Focus our Chrome window and click an absolute screen coordinate."""
+        self.ensure_foreground()
         pyautogui.click(int(point[0]), int(point[1]))
         time.sleep(self.config["delay_short"])
         return True
@@ -483,38 +646,42 @@ class ChromeDriver:
 
     def click_point(self, x, y):
         """Focus the window and click an absolute screen coordinate."""
-        self.focus()
+        self.ensure_foreground()
         pyautogui.click(int(x), int(y))
         time.sleep(self.config["delay_short"])
         return True
 
     def click_image(self, name, timeout=None, confidence=None):
-        """Locate and click an asset image, retrying until the timeout."""
+        """Locate and click an asset image, retrying until the timeout.
+
+        Goes through the shared locator so the click uses the same coordinate
+        mapping and window activation as every other bank step.
+        """
         path = self.asset_path(name)
         if not os.path.exists(path):
             raise FileNotFoundError(
                 "Asset image missing: {} (run capture mode to create it)".format(path)
             )
-        confidence = confidence or self.config["image_confidence"]
-        timeout = timeout if timeout is not None else self.config["image_timeout"]
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            try:
-                loc = pyautogui.locateCenterOnScreen(path, confidence=confidence)
-                if loc is not None:
-                    pyautogui.click(loc)
-                    time.sleep(self.config["delay_short"])
-                    return True
-            except Exception:
-                pass
-            time.sleep(0.5)
-        log("[{}] image not found within timeout: {}".format(self.bank_name, name))
-        return False
+        center, score = self.locate_image(
+            name,
+            timeout=timeout if timeout is not None else self.config["image_timeout"],
+            confidence=confidence,
+        )
+        if center is None:
+            log(
+                "[{}] image not found within timeout: {} (best score {:.2f})".format(
+                    self.bank_name, name, score
+                )
+            )
+            return False
+        log("[{}] clicking {} (score {:.2f})".format(self.bank_name, name, score))
+        self.click_at(center)
+        return True
 
     # ---------------------------------------------------------------- capture
     def select_all_copy(self):
         """Focus the page, then Ctrl+A and Ctrl+C."""
-        self.focus()
+        self.ensure_foreground()
         w = self.config["window_width"]
         h = self.config["window_height"]
         pyautogui.click(w // 2, h // 2)

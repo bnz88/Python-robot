@@ -206,23 +206,41 @@ def reset_account_cooldowns(config, accounts):
     )
 
 
+def live_interval_ms(config):
+    """Capture interval in milliseconds.
+
+    ``live_interval_ms`` is the millisecond setting (default 1000). The older
+    ``live_interval`` in seconds is still honoured when the ms key is absent, so
+    existing config files keep working. The result is clamped to 100 ms so a
+    typo cannot peg the CPU with screenshots.
+    """
+    raw = config.get("live_interval_ms")
+    if raw is None:
+        try:
+            raw = float(config.get("live_interval", 1.0)) * 1000.0
+        except (TypeError, ValueError):
+            raw = 1000.0
+    try:
+        value = int(float(raw))
+    except (TypeError, ValueError):
+        value = 1000
+    return max(100, value)
+
+
 def start_live_capture(config):
     """Start a daemon thread that keeps ``output/live/frame.jpg`` up to date.
 
-    Captures the desktop every ``live_interval`` seconds (default 1.0) while the
-    scraper runs, so the control panel can show a per-robot live image. The
-    frame is written atomically through a fixed temp file, so the folder never
-    accumulates files and the API never serves a half-written image. Disabled
-    when ``live_capture`` is false.
+    Captures the desktop every ``live_interval_ms`` milliseconds (default 1000,
+    minimum 100) while the scraper runs, so the control panel can show a
+    per-robot live image. ``live_interval`` in seconds is used as a fallback.
+    The frame is written atomically through a fixed temp file, so the folder
+    never accumulates files and the API never serves a half-written image.
+    Disabled when ``live_capture`` is false.
     """
     if not config.get("live_capture", True):
         return None
-    try:
-        interval = float(config.get("live_interval", 1.0))
-    except (TypeError, ValueError):
-        interval = 1.0
-    if interval < 0.5:
-        interval = 0.5
+    interval_ms = live_interval_ms(config)
+    interval = interval_ms / 1000.0
 
     out_dir = config.get("output_dir", "output")
     if not os.path.isabs(out_dir):
@@ -253,7 +271,7 @@ def start_live_capture(config):
 
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
-    log("live capture started ({:.1f}s interval -> {})".format(interval, target))
+    log("live capture started ({} ms interval -> {})".format(interval_ms, target))
     return thread
 
 

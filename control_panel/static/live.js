@@ -69,7 +69,8 @@ async function load() {
 
 function init() {
   load();
-  setInterval(load, 2000);
+  const refreshMs = Number(grid.dataset.refreshMs) || 1000;
+  setInterval(load, refreshMs);
 }
 
 init();

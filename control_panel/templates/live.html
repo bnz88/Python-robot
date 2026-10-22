@@ -12,9 +12,9 @@
 
   <main>
     <div class="log-toolbar">
-      <span class="muted">Live desktop view per robot — auto-refreshes every 2s</span>
+      <span class="muted">Live desktop view per robot — auto-refreshes every {{ refresh_ms }} ms</span>
     </div>
-    <div id="live-grid"></div>
+    <div id="live-grid" data-refresh-ms="{{ refresh_ms }}"></div>
   </main>
 
   <script src="{{ url_for('static', filename='common.js') }}"></script>

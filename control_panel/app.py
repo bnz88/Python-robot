@@ -294,7 +294,11 @@ def users_page():
 @app.route("/live")
 @auth.login_required
 def live_page():
-    return render_template("live.html")
+    try:
+        refresh_ms = int(float(config.get("live_refresh_ms", 1000)))
+    except (TypeError, ValueError):
+        refresh_ms = 1000
+    return render_template("live.html", refresh_ms=max(200, refresh_ms))
 
 
 # ------------------------------------------------------------------ robot list

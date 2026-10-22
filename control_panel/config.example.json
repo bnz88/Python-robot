@@ -5,5 +5,6 @@
   "db_path": "panel.db",
   "admin_username": "admin",
   "admin_password": "CHANGE_ME",
-  "hidden_banks": []
+  "hidden_banks": [],
+  "live_refresh_ms": 1000
 }

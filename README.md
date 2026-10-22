@@ -22,13 +22,14 @@ so no WebDriver fingerprint is exposed.
 
 > PERMATA (`permata`) flow: close the landing modal, log in (click the username
 > field image, type username/password, solve the case-sensitive 4-character image
-> captcha — Tesseract-first, training-free, see below). The site refreshes the
-> captcha image itself after a rejected login and keeps the page, so a retry only
-> clears the rejected code from the field and solves the new image — no reload and
-> no refresh button; up to `permata_captcha_attempts` attempts run, a failed
-> intermediate attempt waits `permata_captcha_retry_wait` (3s), and the final
-> attempt waits the full `permata_dashboard_wait`, then confirm login by the
-> user-icon gate (`assets/permata/user_icon.JPG`; its middle letters vary). If the
+> captcha — Tesseract-first, training-free, see below). After Enter it waits
+> `permata_captcha_check_wait` (3 s) and looks for the captcha image again: still
+> visible means the login was rejected, so the rejected code is cleared, the
+> refreshed captcha is solved and Enter is pressed again — no reload and no
+> refresh button. Up to `permata_captcha_attempts` attempts run (set the count in
+> `config.json`/Settings); when the captcha is gone it waits
+> `permata_dashboard_wait` and confirms login by the user-icon gate
+> (`assets/permata/user_icon.JPG`; its middle letters vary). If the
 > icon is not found the account is aborted (nothing saved, cooldown cleared, next
 > account). On success it opens the statement URL, finds the `ind_flag.JPG` flag —
 > the page ignores the mouse wheel, so it scrolls one screen at a time with
@@ -110,6 +111,11 @@ missing.
      Per-bank overrides: `<bank>_zoom_percent` (e.g. `klikbca_zoom_percent: 100` and
      `permata_zoom_percent: 100` keep those banks unzoomed while the global zoom
      is 75).
+   - `live_capture` / `live_interval_ms` — the control panel's live screen feed:
+     the desktop is captured every `live_interval_ms` milliseconds (default
+     `1000`, clamped to 100). The older `live_interval` in seconds is still
+     accepted when the millisecond key is absent. Panel viewers poll at
+     `live_refresh_ms` in `control_panel/config.json` (default 1000 ms).
    - `tabs_to_username` — number of Tab presses to reach the username field after focusing the page (1 by default; tune per site if login types into the wrong field).
    - `image_confidence` — OpenCV match threshold for the submit/menu buttons.
    - `between_accounts_wait` — seconds to wait after closing Chrome before the next account starts.

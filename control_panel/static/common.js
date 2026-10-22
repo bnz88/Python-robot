@@ -34,6 +34,13 @@ function post(url, body) {
   return api(url, { method: "POST", body: body || {} });
 }
 
+async function robotAction(id, action) {
+  if (action === "start") {
+    return post(`/api/robots/${id}/start`, {});
+  }
+  return post(`/api/robots/${id}/stop`, {});
+}
+
 function setStatus(msg, isError) {
   const el = document.getElementById("status");
   if (el) {

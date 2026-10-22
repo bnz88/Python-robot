@@ -389,7 +389,27 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
 }
 
 /* live view: zoom button + enlarged modal */
-.live-card .log-card-status { margin-left: auto; }
+.log-card-status { margin-left: auto; }
+
+.log-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+}
+
+.log-card-actions button {
+  margin-right: 0;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.log-card-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.log-card-actions button:disabled:hover { border-color: var(--border); }
 
 .live-zoom {
   display: inline-flex;
@@ -412,6 +432,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
 }
 
 .live-modal {
+  margin: auto;
   padding: 0;
   max-width: 96vw;
   max-height: 96vh;
@@ -420,6 +441,12 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
+}
+
+.live-modal[open] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .live-modal::backdrop {
@@ -431,8 +458,10 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  width: 100%;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
+  box-sizing: border-box;
 }
 
 .live-modal-title { font-weight: 600; }
@@ -454,6 +483,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
 
 #live-modal-img {
   display: block;
+  margin: 0 auto;
   max-width: 94vw;
   max-height: 84vh;
   background: #0a0e17;

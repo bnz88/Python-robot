@@ -17,6 +17,28 @@ function renderRobot(r, text) {
       <pre class="log-card-body"></pre>`;
     grid.appendChild(card);
     cards[String(r.id)] = card;
+
+    const actions = document.createElement("span");
+    actions.className = "log-card-actions";
+    actions.innerHTML =
+      '<button type="button" class="primary" data-act="start" title="Start scraping">Start</button>' +
+      '<button type="button" data-act="stop" title="Stop scraping">Stop</button>';
+    card.querySelector(".log-card-head").insertBefore(
+      actions,
+      card.querySelector(".log-card-status")
+    );
+
+    card.addEventListener("click", async (event) => {
+      const btn = event.target.closest("button[data-act]");
+      if (!btn || btn.disabled) return;
+      btn.disabled = true;
+      try {
+        await robotAction(String(r.id), btn.dataset.act);
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+      await load();
+    });
   }
 
   card.querySelector(".log-card-title").textContent = `${r.name} (${r.host}:${r.port})`;
@@ -30,6 +52,11 @@ function renderRobot(r, text) {
   const st = card.querySelector(".log-card-status");
   st.className = "log-card-status " + cls;
   st.textContent = statusText;
+
+  const startBtn = card.querySelector('button[data-act="start"]');
+  const stopBtn = card.querySelector('button[data-act="stop"]');
+  if (startBtn) startBtn.disabled = !r.online || !!r.running || !!r.auth_error;
+  if (stopBtn) stopBtn.disabled = !r.online || !r.running;
 
   const acc = card.querySelector(".log-card-acc");
   acc.textContent = `now: ${r.current_account || "-"}  |  next: ${r.next_account || "-"}`;

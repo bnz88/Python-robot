@@ -176,6 +176,58 @@ def _submit(st_page, bo):
     return True
 
 
+def browser_geometry(config):
+    """Window geometry matching the scraper's Chrome.
+
+    Maximized Chrome uses the whole screen, so the same rule is applied here:
+    ``chrome_maximized`` (default true) -> screen size from PyAutoGUI, otherwise
+    ``window_width`` x ``window_height``. Returns ``(width, height, maximized)``.
+    """
+    try:
+        width = int(config.get("window_width", 1280))
+        height = int(config.get("window_height", 900))
+    except (TypeError, ValueError):
+        width, height = 1280, 900
+    if not config.get("chrome_maximized", True):
+        return width, height, False
+    try:
+        import pyautogui
+
+        screen_w, screen_h = pyautogui.size()
+        if screen_w and screen_h:
+            width, height = int(screen_w), int(screen_h)
+    except Exception:
+        pass
+    return width, height, True
+
+
+def browser_launch_args(config, headless):
+    """Chromium flags so the backoffice window matches the scraper's Chrome."""
+    width, height, maximized = browser_geometry(config)
+    args = ["--window-size={},{}".format(width, height)]
+    if not headless:
+        args.insert(0, "--window-position=0,0")
+        if maximized:
+            args.append("--start-maximized")
+        try:
+            scale = float(config.get("chrome_scale", 1.0))
+        except (TypeError, ValueError):
+            scale = 1.0
+        if scale > 0 and abs(scale - 1.0) > 0.001:
+            args.append("--force-device-scale-factor={:g}".format(scale))
+    return args
+
+
+def browser_page_options(config, headless):
+    """``new_page()`` options so the page renders at the scraper's window size."""
+    width, height, _maximized = browser_geometry(config)
+    if headless:
+        return {"viewport": {"width": width, "height": height}}
+    # Headed: no viewport emulation, the page uses the real window size (a
+    # maximized window is the screen minus the taskbar), like the scraper.
+    return {"no_viewport": True}
+
+
 def upload_statement(config, account, report_text):
     """Log in and submit *account*'s *report_text* to the backoffice.
 
@@ -204,8 +256,17 @@ def upload_statement(config, account, report_text):
     keep_open = dry_run and not headless and keep_open_setting
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
-        page = browser.new_page()
+        browser = p.chromium.launch(
+            headless=headless,
+            args=browser_launch_args(config, headless),
+        )
+        page = browser.new_page(**browser_page_options(config, headless))
+        geo_w, geo_h, _maximized = browser_geometry(config)
+        log(
+            "[backoffice] browser {}x{} ({})".format(
+                geo_w, geo_h, "headless" if headless else "windowed"
+            )
+        )
         success = False
         error = None
         try:

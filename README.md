@@ -409,7 +409,10 @@ in the panel's **Accounts** page (add or edit). After a scrape, `main.py` compar
 the new statement text to the previous scrape; when it has changed, the robot
 uploads it to the Sistem88 backoffice using Playwright (`backoffice.py`). Enable
 and configure this under `backoffice` in `config.json` (`enabled`, `username`,
-`password`, `login_url`, `parse_url`, `headless`).
+`password`, `login_url`, `parse_url`, `headless`). The backoffice browser uses the
+same window geometry as the scraper (`chrome_maximized`, otherwise
+`window_width`/`window_height`, plus `chrome_scale`), and logs
+`[backoffice] browser WxH (windowed|headless)` so the match is visible.
 
 ```powershell
 pip install playwright

@@ -14,9 +14,40 @@ function liveUrl(id) {
   return `/api/robots/${id}/live?t=${Date.now()}`;
 }
 
+function statusFor(robot) {
+  if (!robot.online) return { text: "offline", cls: "bad" };
+  if (robot.auth_error) return { text: "auth failed", cls: "warn" };
+  return { text: robot.running ? "RUNNING" : "stopped", cls: "ok" };
+}
+
+function applyRobotState(container, robot) {
+  const status = container.querySelector(".log-card-status");
+  if (status) {
+    const { text, cls } = statusFor(robot);
+    status.className = "log-card-status " + cls;
+    status.textContent = text;
+  }
+  const startBtn = container.querySelector('button[data-act="start"]');
+  const stopBtn = container.querySelector('button[data-act="stop"]');
+  if (startBtn) startBtn.disabled = !robot.online || !!robot.running || !!robot.auth_error;
+  if (stopBtn) stopBtn.disabled = !robot.online || !robot.running;
+}
+
+async function runRobotAction(id, button) {
+  if (!button || button.disabled) return;
+  button.disabled = true;
+  try {
+    await robotAction(id, button.dataset.act);
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+  await load();
+}
+
 function openZoom(robot) {
   modalRobotId = String(robot.id);
   modalTitle.textContent = `${robot.name} (${robot.host}:${robot.port})`;
+  applyRobotState(modal, robot);
   modalImg.src = liveUrl(robot.id);
   modal.showModal();
 }
@@ -68,16 +99,9 @@ function renderRobot(r) {
       card.querySelector(".log-card-status")
     );
 
-    card.addEventListener("click", async (event) => {
+    card.addEventListener("click", (event) => {
       const btn = event.target.closest("button[data-act]");
-      if (!btn || btn.disabled) return;
-      btn.disabled = true;
-      try {
-        await robotAction(String(r.id), btn.dataset.act);
-      } catch (err) {
-        setStatus(err.message, true);
-      }
-      await load();
+      if (btn) runRobotAction(String(r.id), btn);
     });
 
     const zoom = document.createElement("button");
@@ -97,21 +121,7 @@ function renderRobot(r) {
   }
 
   card.querySelector(".log-card-title").textContent = `${r.name} (${r.host}:${r.port})`;
-
-  let statusText = "offline";
-  let cls = "bad";
-  if (r.online) {
-    cls = r.auth_error ? "warn" : "ok";
-    statusText = r.auth_error ? "auth failed" : r.running ? "RUNNING" : "stopped";
-  }
-  const st = card.querySelector(".log-card-status");
-  st.className = "log-card-status " + cls;
-  st.textContent = statusText;
-
-  const startBtn = card.querySelector('button[data-act="start"]');
-  const stopBtn = card.querySelector('button[data-act="stop"]');
-  if (startBtn) startBtn.disabled = !r.online || !!r.running || !!r.auth_error;
-  if (stopBtn) stopBtn.disabled = !r.online || !r.running;
+  applyRobotState(card, r);
 
   card.querySelector(".log-card-acc").textContent =
     `now: ${r.current_account || "-"}  |  next: ${r.next_account || "-"}`;
@@ -139,6 +149,7 @@ async function load() {
   if (modalRobotId !== null) {
     const info = robotsById.get(modalRobotId);
     if (info) {
+      applyRobotState(modal, info);
       modalImg.src = liveUrl(info.id);
     } else {
       closeZoom();
@@ -153,6 +164,11 @@ function init() {
 
   modalClose.addEventListener("click", closeZoom);
   modal.addEventListener("click", (event) => {
+    const btn = event.target.closest("button[data-act]");
+    if (btn) {
+      if (modalRobotId !== null) runRobotAction(modalRobotId, btn);
+      return;
+    }
     if (event.target === modal) {
       closeZoom();
     }

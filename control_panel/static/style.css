@@ -388,3 +388,75 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
   font-size: 13px;
 }
 
+/* live view: zoom button + enlarged modal */
+.live-card .log-card-status { margin-left: auto; }
+
+.live-zoom {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.live-zoom:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.live-modal {
+  padding: 0;
+  max-width: 96vw;
+  max-height: 96vh;
+  width: auto;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.live-modal::backdrop {
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.live-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.live-modal-title { font-weight: 600; }
+
+.live-modal-close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.live-modal-close:hover { border-color: var(--accent); }
+
+#live-modal-img {
+  display: block;
+  max-width: 94vw;
+  max-height: 84vh;
+  background: #0a0e17;
+  object-fit: contain;
+}
+

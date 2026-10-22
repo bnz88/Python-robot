@@ -15,6 +15,15 @@
       <span class="muted">Live desktop view per robot — auto-refreshes every {{ refresh_ms }} ms</span>
     </div>
     <div id="live-grid" data-refresh-ms="{{ refresh_ms }}"></div>
+
+    <dialog id="live-modal" class="live-modal">
+      <div class="live-modal-head">
+        <span id="live-modal-title" class="live-modal-title"></span>
+        <button type="button" id="live-modal-close" class="live-modal-close"
+                aria-label="Close enlarged view" title="Close">&times;</button>
+      </div>
+      <img id="live-modal-img" alt="enlarged live view">
+    </dialog>
   </main>
 
   <script src="{{ url_for('static', filename='common.js') }}"></script>

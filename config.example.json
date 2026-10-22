@@ -122,6 +122,7 @@
   "permata_case_min_score": 0.05,
   "permata_capture_samples": false,
   "permata_logout_button": "logout_btn_permata.JPG",
+  "permata_zoom_percent": 100,
   "mybca_omitted_rows": null,
   "klikbca_omitted_rows": null,
   "cimb_omitted_rows": null,

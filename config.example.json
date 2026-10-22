@@ -93,7 +93,7 @@
   "permata_icon_confidence": 0.7,
   "permata_login_wait": 5.0,
   "permata_dashboard_wait": 7.0,
-  "permata_captcha_check_wait": 3.0,
+  "permata_captcha_retry_wait": 3.0,
   "permata_after_login_wait": 3.0,
   "permata_ind_flag": "ind_flag.JPG",
   "permata_ind_flag_wait": 3.0,

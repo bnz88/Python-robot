@@ -160,7 +160,6 @@ CONFIG_SCHEMA = [
             {"key": "permata_font_file", "label": "Captcha font file", "type": "text", "default": "assets/permata/font.json", "help": "font.json produced by tools/permata_font_id.py; used to resolve each glyph's case without training."},
             {"key": "permata_case_min_score", "label": "Font case min margin", "type": "float", "default": 0.05, "min": 0, "max": 1, "help": "Minimum mean upper-vs-lower margin to accept the font template's case; below it the resolver falls back to Tesseract/baseline."},
             {"key": "permata_capture_samples", "label": "Capture captcha samples", "type": "bool", "default": False, "help": "Save each located captcha crop to dataset/permata/images; a successful login records its label automatically."},
-            {"key": "permata_logout_button", "label": "Logout button image", "type": "text", "default": "logout_btn_permata.JPG"},
             {"key": "permata_zoom_percent", "label": "Page zoom (%)", "type": "int", "default": 100, "min": 25, "max": 500, "help": "Zoom for PERMATA only (overrides the global page zoom). 100 = no zoom."},
             {"key": "permata_omitted_rows", "label": "Omitted rows (x N)", "type": "int", "default": None, "nullable": True, "placeholder": "none", "help": "Manual only (no auto-detect): empty or 0 = no omit; a positive number forces the count."},
         ],

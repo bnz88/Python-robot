@@ -35,9 +35,9 @@ so no WebDriver fingerprint is exposed.
 > `PageDown` (falling back to clicking the page once and re-trying `PageDown`,
 > then the wheel and arrow keys), up to `permata_scroll_max_steps` (20) times,
 > and verifies the page actually moved before each probe — then
-> clicks it, captures the statement, and logs out via the user icon +
-> `logout_btn_permata.JPG`.
-> If a logout image is not found the account is not saved (cooldown cleared, next
+> clicks it, captures the statement, and logs out by clicking the user icon,
+> then pressing Tab twice and Enter.
+> If the user icon is not found the account is not saved (cooldown cleared, next
 > account). The changed statement is then uploaded to the backoffice like the other
 > banks. Omitted-row counting is manual only via `permata_omitted_rows` / the
 > account's `omitted_rows`.
@@ -139,11 +139,10 @@ For each bank the script opens the login page and pauses. Save the required imag
 | `assets/mybca/logout_confirm.png` | (Optional) myBCA logout confirmation button |
 | `assets/cimb/user_id.JPG` | CIMB login form user id input box |
 | `assets/cimb/cimb_logout_btn.JPG` | CIMB logout button (also confirms the logged-in dashboard) |
-| `assets/permata/logout_button.png` / `logout_btn_permata.JPG` | PERMATA logout button (in the user-icon menu) |
 | `assets/permata/close_button.JPG` | PERMATA landing-page modal close button (clicked to dismiss the modal) |
 | `assets/permata/user_id1.JPG` / `user_id2.JPG` | PERMATA username field label (Indonesian / English), clicked to focus the input |
 | `assets/permata/captcha.JPG` | PERMATA captcha image, used to locate the captcha on screen before OCR |
-| `assets/permata/user_icon.JPG` | PERMATA user icon (login gate; also opens the logout menu) — middle letters vary |
+| `assets/permata/user_icon.JPG` | PERMATA user icon (login gate; also opens the logout menu, where Tab ×2 + Enter logs out) — middle letters vary |
 | `assets/permata/ind_flag.JPG` | PERMATA statement flag, clicked on the statement page to load the mutations |
 
 myBCA needs no reference images to log in: its login page auto-focuses the username

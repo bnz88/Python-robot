@@ -18,11 +18,10 @@ Steps (all waits/images configurable via config.json "permata_*"):
    ``permata_ind_flag_wait`` and click it.
 5. Wait ``permata_statement_wait`` for the statement to load, capture it with
    Ctrl+A / Ctrl+C, then wait ``permata_capture_wait``.
-6. Log out: click the user icon, wait ``permata_logout_open_wait``, then click
-   the logout button (``permata_logout_button``, default
-   ``logout_btn_permata.JPG``). If either image is not found the account is not
-   saved: main.py clears the cooldown and moves on to the next account
-   (``logout_image_found`` False).
+6. Log out: click the user icon, wait ``permata_logout_open_wait``, then press
+   Tab twice and Enter to activate the logout entry of the opened menu. If the
+   user icon is not found the account is not saved: main.py clears the cooldown
+   and moves on to the next account (``logout_image_found`` False).
 
 The changed statement is then uploaded to the backoffice like the other banks.
 """
@@ -53,7 +52,7 @@ class Permata:
             input(
                 "Capture mode [permata]: save assets/permata/ reference images "
                 "(close_button.JPG, user_id1.JPG/user_id2.JPG, captcha.JPG, "
-                "user_icon.JPG, ind_flag.JPG, logout_btn_permata.JPG) and note "
+                "user_icon.JPG, ind_flag.JPG) and note "
                 "the captcha screen region, then press Enter to continue..."
             )
             return None
@@ -327,14 +326,15 @@ class Permata:
 
     # ---------------------------------------------------------------- logout
     def _logout(self):
-        """Log out: click the user icon, then the logout button image.
+        """Log out: click the user icon, then Tab twice and Enter.
 
-        Sets ``driver.logout_image_found`` False when either image is not found
-        so main.py leaves the account un-flagged (cooldown cleared, not saved)
-        and moves on to the next account.
+        The account menu opens on the icon click; two Tabs move the keyboard
+        selection to its logout entry and Enter activates it, so no logout-button
+        image is needed. Sets ``driver.logout_image_found`` False when the user
+        icon is missing, so main.py leaves the account un-flagged (cooldown
+        cleared, not saved) and moves on to the next account.
         """
         icon = self.config.get("permata_user_icon", "user_icon.JPG")
-        button = self.config.get("permata_logout_button", "logout_btn_permata.JPG")
         self.driver.logout_image_found = False
         # The statement page may still be scrolled down from the flag search;
         # bring the header (user icon) back into view before looking for it.
@@ -364,17 +364,8 @@ class Permata:
         log("[permata] waiting {:.1f}s for the logout menu".format(open_wait))
         time.sleep(open_wait)
 
-        center, score = self.driver.locate_image(
-            button, timeout=self._image_timeout(), scales=self._scales()
-        )
-        if center is None:
-            log(
-                "[permata] logout button not found ({}; score {:.2f})".format(
-                    button, score
-                )
-            )
-            return
+        log("[permata] logging out with Tab, Tab, Enter")
+        self.driver.tab(2)
+        self.driver.press_enter()
         self.driver.logout_image_found = True
-        log("[permata] logging out via {} (score {:.2f})".format(button, score))
-        self.driver.click_at(center)
         time.sleep(self.config.get("permata_logout_process_wait", 3.0))

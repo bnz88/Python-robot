@@ -53,6 +53,7 @@ CONFIG_SCHEMA = [
             {"key": "loop_forever", "label": "Loop forever", "type": "bool", "default": True},
             {"key": "window_width", "label": "Window width (px)", "type": "int", "default": 1280},
             {"key": "window_height", "label": "Window height (px)", "type": "int", "default": 900},
+            {"key": "chrome_maximized", "label": "Open Chrome maximized", "type": "bool", "default": True, "help": "Maximize Chrome on every scrape. Window width/height are used only when this is off."},
             {"key": "window_title_hint", "label": "Window title hint", "type": "text", "default": "Google Chrome"},
             {"key": "output_dir", "label": "Output directory", "type": "text", "default": "output"},
             {"key": "live_capture", "label": "Live screen feed", "type": "bool", "default": True, "help": "Capture the desktop to output/live/frame.jpg while the scraper runs."},

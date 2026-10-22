@@ -2,6 +2,7 @@
   "chrome_exe": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
   "window_width": 1280,
   "window_height": 900,
+  "chrome_maximized": true,
   "user_data_dir": "",
   "delay_short": 0.5,
   "delay_long": 2.5,

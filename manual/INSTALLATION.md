@@ -173,7 +173,8 @@ Open `config.json` in Notepad and confirm these values (most are already correct
 | Setting | Meaning | Typical value |
 |---|---|---|
 | `chrome_exe` | Where Chrome is installed | `C:\Program Files\Google\Chrome\Application\chrome.exe` |
-| `window_width` / `window_height` | Fixed browser window size; your screen must be at least this big | `1280` / `900` |
+| `window_width` / `window_height` | Fixed browser window size when `chrome_maximized` is disabled; your screen must be at least this big | `1280` / `900` |
+| `chrome_maximized` | Open Chrome maximized (full screen) on every scrape | `true` |
 | `api_host` | Address the robot listens on | `0.0.0.0` |
 | `api_port` | Port the robot listens on | `8000` |
 | `robot_token` | A secret password between the panel and the robot | any long random text |

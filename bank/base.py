@@ -43,15 +43,24 @@ class ChromeDriver:
 
     # ---------------------------------------------------------------- lifecycle
     def launch(self, url):
-        """Start Chrome with a fresh profile at a fixed window size."""
+        """Start Chrome with a fresh profile, maximized unless configured otherwise."""
         self.profile_dir = tempfile.mkdtemp(prefix="bca_bot_profile_")
         self._seed_no_password_manager()
+        width, height = self.window_geometry()
+        # Macros (focus, form click, select-all, myBCA logout) derive coordinates
+        # from these values, so keep them in sync with the real window.
+        self.config["window_width"] = width
+        self.config["window_height"] = height
+        maximized = self.config.get("chrome_maximized", True)
         args = [
             self.config["chrome_exe"],
             "--user-data-dir={}".format(self.profile_dir),
-            "--window-size={},{}".format(
-                self.config["window_width"], self.config["window_height"]
-            ),
+        ]
+        if maximized:
+            args.append("--start-maximized")
+        else:
+            args.append("--window-size={},{}".format(width, height))
+        args += [
             "--window-position=0,0",
             "--no-first-run",
             "--no-default-browser-check",
@@ -68,10 +77,52 @@ class ChromeDriver:
         if proxy_ip and proxy_port:
             args.append("--proxy-server=http://{}:{}".format(proxy_ip, proxy_port))
         args.append(url)
-        log("[{}] launching Chrome: {}".format(self.bank_name, url))
+        log(
+            "[{}] launching Chrome ({}): {}".format(
+                self.bank_name,
+                "maximized" if maximized else "{}x{}".format(width, height),
+                url,
+            )
+        )
         self.process = subprocess.Popen(args)
         time.sleep(self.config["page_load_wait"])
         self.focus()
+        if maximized:
+            self.maximize()
+
+    def window_geometry(self):
+        """Return the (width, height) the Chrome window occupies."""
+        if self.config.get("chrome_maximized", True):
+            try:
+                width, height = pyautogui.size()
+                if width and height:
+                    return int(width), int(height)
+            except Exception:
+                log(
+                    "[{}] could not read the screen size; using window_width/window_height".format(
+                        self.bank_name
+                    )
+                )
+        return int(self.config["window_width"]), int(self.config["window_height"])
+
+    def maximize(self):
+        """Maximize the Chrome window (in addition to --start-maximized)."""
+        hint = self.config.get("window_title_hint", "Google Chrome")
+        try:
+            for win in reversed(pyautogui.getWindowsWithTitle(hint)):
+                if not win.title:
+                    continue
+                try:
+                    if win.isMinimized:
+                        win.restore()
+                    win.maximize()
+                    time.sleep(self.config["delay_short"])
+                    return True
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return False
 
     def _seed_no_password_manager(self):
         """Pre-write Chrome's Preferences to disable the password manager.

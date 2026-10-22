@@ -79,7 +79,11 @@ missing.
 
 2. Adjust `config.json` if your Chrome path or timing differs. Notable keys:
    - `chrome_exe` — Chrome binary path.
-   - `window_width` / `window_height` — fixed window size (screen resolution must fit it).
+   - `window_width` / `window_height` — fixed window size when `chrome_maximized` is `false` (screen resolution must fit it).
+   - `chrome_maximized` — open Chrome maximized to the full screen for every bank (default `true`).
+     `window_width` / `window_height` are then only a fallback for coordinates;
+     reference images are matched against the real window, so recapture the assets
+     (`python main.py --capture`) if a different window size breaks the matches.
    - `tabs_to_username` — number of Tab presses to reach the username field after focusing the page (1 by default; tune per site if login types into the wrong field).
    - `image_confidence` — OpenCV match threshold for the submit/menu buttons.
    - `between_accounts_wait` — seconds to wait after closing Chrome before the next account starts.

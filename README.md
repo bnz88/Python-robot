@@ -398,3 +398,17 @@ python -m playwright install chromium
   coordinates before clicking, so display scaling (125 %/150 %) no longer shifts
   clicks. Keep scaling at 100 % where possible and use the same scaling on the
   machine that captured the reference images.
+- A disconnected RDP session keeps the processes alive but stops rendering the
+  desktop, which breaks screen capture and CAPTCHA OCR. Use
+  `deploy\disconnect-to-console.ps1` (or its desktop shortcut) instead of closing
+  the RDP window: it re-attaches the session to the console with `tscon` and then
+  drops the connection, so the robot keeps working. `-DisableSleep` also turns off
+  standby, the monitor timeout and the screen saver.
+
+  ```powershell
+  cd C:\Apps\python-robot\Python-robot
+  .\deploy\create-disconnect-shortcut.ps1    # one-time: adds the desktop shortcut
+  ```
+
+  Never sign out or shut down the session while a run is active; that stops the
+  scraper.

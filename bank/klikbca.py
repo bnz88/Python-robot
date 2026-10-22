@@ -39,7 +39,7 @@ class KlikBCA:
         if capture_mode:
             input(
                 "Capture mode [klikbca]: save assets/klikbca/statement_button.png "
-                "and logout_button.png as needed, then press Enter to continue..."
+                "and logout_button.JPG as needed, then press Enter to continue..."
             )
         else:
             self._wait_for_page(
@@ -51,7 +51,7 @@ class KlikBCA:
 
         if not capture_mode:
             self._wait_for_page(
-                self.config.get("klikbca_logout_button", "logout_button.PNG"),
+                self.config.get("klikbca_logout_button", "logout_button.JPG"),
                 "dashboard page",
             )
 
@@ -175,7 +175,7 @@ class KlikBCA:
 
     def _logout(self):
         logout_button = self.config.get(
-            "klikbca_logout_button", "logout_button.PNG"
+            "klikbca_logout_button", "logout_button.JPG"
         )
         path = self.driver.asset_path(logout_button)
         self.driver.logout_image_found = os.path.exists(path)

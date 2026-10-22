@@ -160,7 +160,7 @@ graceful manual-pause fallback.
 
 KlikBCA also uses two page-check images to confirm each screen is actually loaded
 (`klikbca_landing_page`, default `landingpage.PNG`, and `klikbca_logout_button`,
-default `logout_button.PNG`, which marks the dashboard). The script waits up to
+default `logout_button.JPG`, which marks the dashboard). The script waits up to
 `klikbca_page_timeout` seconds for each one; if it never appears the account is
 stopped before anything is captured — nothing is saved, the account is not flagged as
 scraped (its cooldown is cleared), and the loop moves on to the next account.

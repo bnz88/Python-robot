@@ -53,9 +53,8 @@ class Permata:
             input(
                 "Capture mode [permata]: save assets/permata/ reference images "
                 "(close_button.JPG, user_id1.JPG/user_id2.JPG, captcha.JPG, "
-                "captcha refresh image, user_icon.JPG, ind_flag.JPG, "
-                "logout_btn_permata.JPG) and note the captcha screen region, "
-                "then press Enter to continue..."
+                "user_icon.JPG, ind_flag.JPG, logout_btn_permata.JPG) and note "
+                "the captcha screen region, then press Enter to continue..."
             )
             return None
 
@@ -155,22 +154,17 @@ class Permata:
     def _login(self, username, password):
         """Type credentials, solve the captcha by OCR, submit, retry on failure.
 
-        Each attempt OCRs the captcha, types it and submits. On failure the
-        captcha is refreshed and the next attempt runs. After
-        ``permata_captcha_attempts`` failures the account is aborted.
+        Each attempt OCRs the captcha, types it and submits. PERMATA refreshes
+        the captcha image itself after a rejected login (the page is not
+        reloaded), so a retry only clears the stale code from the field, solves
+        the new image and types it. After ``permata_captcha_attempts``
+        failures the account is aborted.
         """
         login_wait = self.config.get("permata_login_wait", 5.0)
         log("[permata] waiting {:.1f}s for the login form".format(login_wait))
         time.sleep(login_wait)
 
-        # Focus the username field by clicking its image (the label can be
-        # Indonesian or English, hence two reference images), type the
-        # username, Tab to the password, type it, then Tab to the captcha box.
-        self._focus_username()
-        self.driver.type_text(username)
-        self.driver.tab(1)
-        self.driver.type_text(password)
-        self.driver.tab(1)
+        self._fill_credentials(username, password)
 
         attempts = self.config.get("permata_captcha_attempts", 2)
         dashboard_wait = self.config.get("permata_dashboard_wait", 7.0)
@@ -205,11 +199,26 @@ class Permata:
                 return
             log("[permata] login not confirmed on attempt {}".format(attempt))
             if attempt < attempts:
-                self._refresh_captcha()
+                # Only the captcha image is refreshed by the site; the page and
+                # the credentials stay, so just clear the rejected code.
+                log("[permata] site refreshed the captcha; clearing the field")
+                self.driver.clear_focused_field()
 
         raise ScrapeAborted(
             "permata login failed after {} captcha attempt(s)".format(attempts)
         )
+
+    def _fill_credentials(self, username, password):
+        """Focus the username field image, type both credentials, Tab to captcha.
+
+        The username label can be Indonesian or English, hence two reference
+        images. After the password, one Tab moves to the captcha box.
+        """
+        self._focus_username()
+        self.driver.type_text(username)
+        self.driver.tab(1)
+        self.driver.type_text(password)
+        self.driver.tab(1)
 
     def _confirm_captcha_sample(self):
         """Label the last captured captcha after a successful login.
@@ -267,27 +276,6 @@ class Permata:
             return text
         return read_captcha(self.config, solver=solver, driver=self.driver)
 
-    def _refresh_captcha(self):
-        """Click the captcha image to request a fresh code for the next attempt."""
-        image = self.config.get(
-            "permata_captcha_refresh_image", "captcha_refresh.png"
-        )
-        center, score = self.driver.locate_image(
-            image, timeout=self._image_timeout(), scales=self._scales()
-        )
-        if center is None:
-            log(
-                "[permata] captcha refresh image not found ({}; score "
-                "{:.2f})".format(image, score)
-            )
-            return
-        log(
-            "[permata] refreshing captcha via {} (score {:.2f})".format(
-                image, score
-            )
-        )
-        self.driver.click_at(center)
-
     # ---------------------------------------------------------------- helpers
     def _image_timeout(self):
         return self.config.get(
@@ -305,19 +293,30 @@ class Permata:
 
     # ------------------------------------------------------------- statement
     def _open_statement(self):
-        """Wait for the statement flag image, then click it to load mutations.
+        """Scroll to the statement flag, then click it to load mutations.
 
-        Best-effort: when the flag image is not found it is logged and the flow
-        continues to the statement wait.
+        The flag usually sits below the fold, so the page is scrolled down
+        ``permata_scroll_step_px`` pixels at a time (default 100) up to
+        ``permata_scroll_max_steps`` times until the image appears. Best-effort:
+        when it is not found the flow logs it and continues to the statement
+        wait.
         """
         image = self.config.get("permata_ind_flag", "ind_flag.JPG")
-        center, score = self.driver.locate_image(
-            image, timeout=self._image_timeout(), scales=self._scales()
+        step = self.config.get("permata_scroll_step_px", 100)
+        max_steps = self.config.get("permata_scroll_max_steps", 20)
+        center, score = self.driver.locate_image_by_scrolling(
+            image,
+            step=step,
+            max_steps=max_steps,
+            probe_timeout=min(self._image_timeout(), 1.0),
+            scales=self._scales(),
         )
         if center is None:
             log(
-                "[permata] statement flag image not found ({}; score "
-                "{:.2f}); continuing".format(image, score)
+                "[permata] statement flag image not found after scrolling "
+                "{} x {}px ({}; best score {:.2f}); continuing".format(
+                    max_steps, step, image, score
+                )
             )
             return
         log("[permata] statement flag found ({}; score {:.2f})".format(image, score))
@@ -337,6 +336,9 @@ class Permata:
         icon = self.config.get("permata_user_icon", "user_icon.JPG")
         button = self.config.get("permata_logout_button", "logout_btn_permata.JPG")
         self.driver.logout_image_found = False
+        # The statement page may still be scrolled down from the flag search;
+        # bring the header (user icon) back into view before looking for it.
+        self.driver.scroll_to_top()
 
         center, score = self.driver.locate_image(
             icon,

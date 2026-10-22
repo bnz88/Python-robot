@@ -321,6 +321,14 @@ class ChromeDriver:
         )
         return False
 
+    def clear_focused_field(self):
+        """Select and delete the text of the focused input (Ctrl+A, Delete)."""
+        self.ensure_foreground()
+        pyautogui.hotkey("ctrl", "a")
+        time.sleep(self.config["delay_short"] * 0.5)
+        pyautogui.press("delete")
+        time.sleep(self.config["delay_short"] * 0.5)
+
     def goto_url(self, url):
         """Focus the address bar and navigate to *url*."""
         self.ensure_foreground()
@@ -507,6 +515,102 @@ class ChromeDriver:
             if time.time() >= deadline:
                 return None, best
             time.sleep(0.5)
+
+    def locate_image_by_scrolling(
+        self,
+        name,
+        step=100,
+        max_steps=20,
+        probe_timeout=0.8,
+        confidence=None,
+        scales=None,
+        wheel_px=100,
+        reset=True,
+    ):
+        """Locate an image on a page by scrolling down in small increments.
+
+        :meth:`locate_image` only sees what is currently rendered, so an
+        element below the fold (e.g. the PERMATA statement flag) is never
+        found. This scrolls down *step* pixels at a time (one wheel notch is
+        about *wheel_px*), probing after each step, and stops when the image
+        appears, when the page stops moving (bottom reached), or after
+        *max_steps* increments.
+
+        Returns ``(center, score)`` like :meth:`locate_image`; *center* is the
+        image position on screen, *score* the best match seen at any position.
+        """
+        center, score = self.locate_image(
+            name, timeout=probe_timeout, confidence=confidence, scales=scales
+        )
+        best = score
+        if center is not None:
+            return center, best
+        if step <= 0 or max_steps <= 0:
+            return None, best
+
+        self.ensure_foreground()
+        notches = max(1, int(round(float(step) / float(max(1, wheel_px)))))
+        mouse_x = self.config["window_width"] // 2
+        mouse_y = self.config["window_height"] // 2
+        try:
+            pyautogui.moveTo(mouse_x, mouse_y)
+        except Exception:
+            pass
+        if reset:
+            # Start from the top so a late-rendering element is not skipped.
+            self.scroll_to_top()
+
+        last = self._screen_signature()
+        unchanged = 0
+        for index in range(1, max_steps + 1):
+            try:
+                pyautogui.scroll(-notches, x=mouse_x, y=mouse_y)
+            except Exception:
+                break
+            time.sleep(self.config["delay_short"])
+            current = self._screen_signature()
+            if current == last:
+                unchanged += 1
+                if unchanged >= 2:
+                    log(
+                        "[{}] reached the bottom while looking for {}".format(
+                            self.bank_name, name
+                        )
+                    )
+                    break
+            else:
+                unchanged = 0
+                last = current
+            log(
+                "[{}] scrolled down {}px (step {}/{}) looking for {}".format(
+                    self.bank_name, step * index, index, max_steps, name
+                )
+            )
+            center, score = self.locate_image(
+                name, timeout=probe_timeout, confidence=confidence, scales=scales
+            )
+            best = max(best, score)
+            if center is not None:
+                return center, best
+        return None, best
+
+    def _screen_signature(self):
+        """Cheap fingerprint of the visible page, used to detect scrolling."""
+        try:
+            shot = pyautogui.screenshot()
+            return shot.resize((64, 36)).convert("L").tobytes()
+        except Exception:
+            return b""
+
+    def scroll_to_top(self):
+        """Scroll the focused page back to the top, without touching the mouse."""
+        try:
+            self.ensure_foreground()
+            pyautogui.hotkey("ctrl", "home")
+            time.sleep(self.config["delay_short"])
+            return True
+        except Exception:
+            return False
 
     def click_at(self, point):
         """Focus our Chrome window and click an absolute screen coordinate."""

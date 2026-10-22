@@ -22,14 +22,19 @@ so no WebDriver fingerprint is exposed.
 
 > PERMATA (`permata`) flow: close the landing modal, log in (click the username
 > field image, type username/password, solve the case-sensitive 4-character image
-> captcha — Tesseract-first, training-free, see below — with refresh/retry up to
-> `permata_captcha_attempts`; a failed attempt waits only
-> `permata_captcha_retry_wait` (3s) before the next captcha, while the final
-> attempt waits the full `permata_dashboard_wait`), then confirm login by the
+> captcha — Tesseract-first, training-free, see below). The site refreshes the
+> captcha image itself after a rejected login and keeps the page, so a retry only
+> clears the rejected code from the field and solves the new image — no reload and
+> no refresh button; up to `permata_captcha_attempts` attempts run, a failed
+> intermediate attempt waits `permata_captcha_retry_wait` (3s), and the final
+> attempt waits the full `permata_dashboard_wait`, then confirm login by the
 > user-icon gate (`assets/permata/user_icon.JPG`; its middle letters vary). If the
 > icon is not found the account is aborted (nothing saved, cooldown cleared, next
-> account). On success it opens the statement URL, clicks the `ind_flag.JPG` flag,
-> captures the statement, and logs out via the user icon + `logout_btn_permata.JPG`.
+> account). On success it opens the statement URL, finds the `ind_flag.JPG` flag —
+> scrolling down `permata_scroll_step_px` (100) pixels at a time, up to
+> `permata_scroll_max_steps` (20) times, when the flag is below the fold —
+> clicks it, captures the statement, and logs out via the user icon +
+> `logout_btn_permata.JPG`.
 > If a logout image is not found the account is not saved (cooldown cleared, next
 > account). The changed statement is then uploaded to the backoffice like the other
 > banks. Omitted-row counting is manual only via `permata_omitted_rows` / the
@@ -117,7 +122,6 @@ For each bank the script opens the login page and pauses. Save the required imag
 | `assets/permata/close_button.JPG` | PERMATA landing-page modal close button (clicked to dismiss the modal) |
 | `assets/permata/user_id1.JPG` / `user_id2.JPG` | PERMATA username field label (Indonesian / English), clicked to focus the input |
 | `assets/permata/captcha.JPG` | PERMATA captcha image, used to locate the captcha on screen before OCR |
-| `assets/permata/captcha_refresh.png` | PERMATA captcha image / refresh control (clicked to get a new code) |
 | `assets/permata/user_icon.JPG` | PERMATA user icon (login gate; also opens the logout menu) — middle letters vary |
 | `assets/permata/ind_flag.JPG` | PERMATA statement flag, clicked on the statement page to load the mutations |
 

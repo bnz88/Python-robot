@@ -32,7 +32,10 @@ so no WebDriver fingerprint is exposed.
 > icon is not found the account is aborted (nothing saved, cooldown cleared, next
 > account). On success it opens the statement URL, finds the `ind_flag.JPG` flag —
 > scrolling down `permata_scroll_step_px` (100) pixels at a time, up to
-> `permata_scroll_max_steps` (20) times, when the flag is below the fold —
+> `permata_scroll_max_steps` (20) times, when the flag is below the fold. Each
+> step verifies the page actually moved and falls back from the mouse wheel to
+> `PageDown`/arrow keys, so a page whose scrollbar sits in an inner panel or
+> iframe still scrolls —
 > clicks it, captures the statement, and logs out via the user icon +
 > `logout_btn_permata.JPG`.
 > If a logout image is not found the account is not saved (cooldown cleared, next

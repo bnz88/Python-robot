@@ -549,41 +549,35 @@ class ChromeDriver:
             return None, best
 
         self.ensure_foreground()
-        notches = max(1, int(round(float(step) / float(max(1, wheel_px)))))
-        mouse_x = self.config["window_width"] // 2
-        mouse_y = self.config["window_height"] // 2
-        try:
-            pyautogui.moveTo(mouse_x, mouse_y)
-        except Exception:
-            pass
         if reset:
             # Start from the top so a late-rendering element is not skipped.
             self.scroll_to_top()
 
-        last = self._screen_signature()
-        unchanged = 0
+        method = None
+        moved_before = False
         for index in range(1, max_steps + 1):
-            try:
-                pyautogui.scroll(-notches, x=mouse_x, y=mouse_y)
-            except Exception:
-                break
-            time.sleep(self.config["delay_short"])
-            current = self._screen_signature()
-            if current == last:
-                unchanged += 1
-                if unchanged >= 2:
+            method = self.scroll_page(
+                direction=1, step_px=step, method=method, wheel_px=wheel_px
+            )
+            if method is None:
+                if moved_before:
                     log(
                         "[{}] reached the bottom while looking for {}".format(
                             self.bank_name, name
                         )
                     )
-                    break
-            else:
-                unchanged = 0
-                last = current
+                else:
+                    log(
+                        "[{}] could not scroll the page while looking for {} "
+                        "(no wheel or key event moved it)".format(
+                            self.bank_name, name
+                        )
+                    )
+                break
+            moved_before = True
             log(
-                "[{}] scrolled down {}px (step {}/{}) looking for {}".format(
-                    self.bank_name, step * index, index, max_steps, name
+                "[{}] scrolled down {}px via {} (step {}/{}) looking for {}".format(
+                    self.bank_name, step * index, method, index, max_steps, name
                 )
             )
             center, score = self.locate_image(
@@ -593,6 +587,67 @@ class ChromeDriver:
             if center is not None:
                 return center, best
         return None, best
+
+    def scroll_page(self, direction=1, step_px=100, method=None, wheel_px=100):
+        """Scroll the visible page by about *step_px* and confirm it moved.
+
+        Pages differ in which element owns the scrollbar (the body, an inner
+        panel, an iframe), so the mouse wheel is tried over a few points and
+        then the keyboard. *direction* is +1 down, -1 up. The name of the
+        method that actually moved the page is returned (``wheel``,
+        ``pagedown``/``pageup`` or ``arrows``), or ``None`` when nothing moved.
+
+        *method* is the previous successful method; it is retried first so the
+        remaining steps stay fast.
+        """
+        notches = max(1, int(round(float(step_px) / float(max(1, wheel_px)))))
+        width = self.config["window_width"]
+        height = self.config["window_height"]
+        page_key = "pagedown" if direction > 0 else "pageup"
+        arrow_key = "down" if direction > 0 else "up"
+        arrow_presses = max(1, int(step_px) // 40)
+        clicks = -notches if direction > 0 else notches
+        before = self._screen_signature()
+
+        def moved():
+            time.sleep(self.config["delay_short"])
+            return self._screen_signature() != before
+
+        if method in (page_key, "arrows"):
+            try:
+                if method == "arrows":
+                    pyautogui.press(arrow_key, presses=arrow_presses)
+                else:
+                    self.ensure_foreground()
+                    pyautogui.press(page_key)
+                if moved():
+                    return method
+            except Exception:
+                pass
+
+        for x, y in (
+            (width // 2, height // 2),
+            (int(width * 0.3), height // 2),
+            (width // 2, int(height * 0.75)),
+        ):
+            try:
+                pyautogui.scroll(clicks, x=x, y=y)
+            except Exception:
+                continue
+            if moved():
+                return "wheel"
+
+        try:
+            self.ensure_foreground()
+            pyautogui.press(page_key)
+            if moved():
+                return page_key
+            pyautogui.press(arrow_key, presses=arrow_presses)
+            if moved():
+                return "arrows"
+        except Exception:
+            pass
+        return None
 
     def _screen_signature(self):
         """Cheap fingerprint of the visible page, used to detect scrolling."""

@@ -150,6 +150,7 @@ class ChromeDriver:
         self.focus()
         if maximized:
             self.maximize()
+        self.apply_page_zoom()
 
     def _count_processes(self, image_name):
         """Number of running processes with this image name (0 on failure)."""
@@ -220,6 +221,47 @@ class ChromeDriver:
         if abs(scale - 1.0) < 0.001:
             return None
         return "--force-device-scale-factor={:g}".format(scale)
+
+    # Chrome's preset page-zoom levels, reached with Ctrl +/- (or Ctrl + wheel).
+    ZOOM_LEVELS = [400, 300, 250, 200, 175, 150, 125, 110, 100, 90, 80, 75, 67, 50, 33, 25]
+
+    def page_zoom_percent(self):
+        """Configured page zoom in percent (100 = no zoom)."""
+        try:
+            percent = int(float(self.config.get("chrome_zoom_percent", 100)))
+        except (TypeError, ValueError):
+            return 100
+        return percent if percent > 0 else 100
+
+    def apply_page_zoom(self):
+        """Set the page zoom of the current tab, like Ctrl + mouse wheel.
+
+        Chrome keeps zoom per origin and the scraper uses a temporary profile,
+        so this is applied after every navigation: Ctrl+0 resets to 100 %, then
+        Ctrl+- / Ctrl+= steps through the presets to the configured percentage.
+        """
+        percent = self.page_zoom_percent()
+        if percent == 100:
+            return 100
+        levels = self.ZOOM_LEVELS
+        if percent not in levels:
+            nearest = min(levels, key=lambda value: abs(value - percent))
+            log(
+                "[{}] page zoom {}% is not a Chrome preset; using {}%".format(
+                    self.bank_name, percent, nearest
+                )
+            )
+            percent = nearest
+        steps = levels.index(percent) - levels.index(100)
+        self.ensure_foreground()
+        pyautogui.hotkey("ctrl", "0")
+        time.sleep(0.15)
+        key = "-" if steps > 0 else "="
+        for _ in range(abs(steps)):
+            pyautogui.hotkey("ctrl", key)
+            time.sleep(0.1)
+        log("[{}] page zoom set to {}%".format(self.bank_name, percent))
+        return percent
 
     def window_geometry(self):
         """Return the (width, height) the Chrome window occupies."""
@@ -525,6 +567,8 @@ class ChromeDriver:
         pyautogui.write(url, interval=0.02)
         pyautogui.press("enter")
         time.sleep(self.config["page_load_wait"])
+        # A new origin starts at 100 %, so restore the configured page zoom.
+        self.apply_page_zoom()
 
     def tab(self, count=1):
         for _ in range(max(0, count)):

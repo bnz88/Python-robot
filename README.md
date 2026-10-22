@@ -101,6 +101,12 @@ missing.
      so changing it requires recapturing the reference images. Useful when the
      robot desktop is smaller than the screen the assets were captured on
      (e.g. a 1024×768 console vs a 1262×770 RDP session).
+   - `chrome_zoom_percent` — **page** zoom, the same thing as Ctrl + mouse wheel
+     (`75` = 75 %). Applied after every navigation with Ctrl+0 and the Chrome
+     presets (`25 33 50 67 75 80 90 100 110 125 150 175 200 250 300 400 500`);
+     values outside the list snap to the nearest preset. The browser UI stays at
+     100 %, only the page shrinks — which is usually what you want on a small
+     console. Reference images must be captured at the same zoom.
    - `tabs_to_username` — number of Tab presses to reach the username field after focusing the page (1 by default; tune per site if login types into the wrong field).
    - `image_confidence` — OpenCV match threshold for the submit/menu buttons.
    - `between_accounts_wait` — seconds to wait after closing Chrome before the next account starts.

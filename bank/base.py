@@ -226,9 +226,17 @@ class ChromeDriver:
     ZOOM_LEVELS = [400, 300, 250, 200, 175, 150, 125, 110, 100, 90, 80, 75, 67, 50, 33, 25]
 
     def page_zoom_percent(self):
-        """Configured page zoom in percent (100 = no zoom)."""
+        """Page zoom in percent for this bank (100 = no zoom).
+
+        ``<bank>_zoom_percent`` overrides the global ``chrome_zoom_percent``, so
+        one bank can stay at 100 % while the others are zoomed out.
+        """
+        value = self.config.get(
+            "{}_zoom_percent".format(self.bank_name),
+            self.config.get("chrome_zoom_percent", 100),
+        )
         try:
-            percent = int(float(self.config.get("chrome_zoom_percent", 100)))
+            percent = int(float(value))
         except (TypeError, ValueError):
             return 100
         return percent if percent > 0 else 100

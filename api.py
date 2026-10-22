@@ -97,6 +97,7 @@ CONFIG_SCHEMA = [
             {"key": "klikbca_statement_buttons", "label": "Statement button images", "type": "csv", "default": [], "help": "Comma-separated image names inside assets/klikbca (bare names, not full paths)."},
             {"key": "klikbca_stmt_button_timeout", "label": "Statement button search (s)", "type": "float", "default": 5.0, "help": "How long to look for each statement button image before falling back to tabs."},
             {"key": "klikbca_logout_button", "label": "Logout button image", "type": "text", "default": "logout_button.PNG"},
+            {"key": "klikbca_zoom_percent", "label": "Page zoom (%)", "type": "int", "default": 100, "min": 25, "max": 500, "help": "Zoom for KlikBCA only (overrides the global page zoom). 100 = no zoom."},
             {"key": "klikbca_logout_wait", "label": "Logout wait (s)", "type": "float", "default": 3.0},
             {"key": "klikbca_omitted_rows", "label": "Omitted rows (x N)", "type": "int", "default": None, "nullable": True, "placeholder": "auto", "help": "Empty or 0 = auto-detect; a positive number forces the count."},
         ],

@@ -69,6 +69,7 @@
   "klikbca_stmt_button_timeout": 5.0,
   "klikbca_stmt_fallback_tabs": 14,
   "klikbca_logout_button": "logout_button.PNG",
+  "klikbca_zoom_percent": 100,
   "klikbca_logout_wait": 3.0,
   "cimb_login_url": "https://www.cimbocto.co.id/login",
   "cimb_statement_url": "https://www.cimbocto.co.id/myaccount/casa/1",

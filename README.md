@@ -107,6 +107,8 @@ missing.
      values outside the list snap to the nearest preset. The browser UI stays at
      100 %, only the page shrinks — which is usually what you want on a small
      console. Reference images must be captured at the same zoom.
+     Per-bank overrides: `<bank>_zoom_percent` (e.g. `klikbca_zoom_percent: 100`
+     keeps KlikBCA unzoomed while the global zoom is 75).
    - `tabs_to_username` — number of Tab presses to reach the username field after focusing the page (1 by default; tune per site if login types into the wrong field).
    - `image_confidence` — OpenCV match threshold for the submit/menu buttons.
    - `between_accounts_wait` — seconds to wait after closing Chrome before the next account starts.

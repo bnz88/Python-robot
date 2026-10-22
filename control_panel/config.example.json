@@ -4,5 +4,6 @@
   "secret_key": "CHANGE_ME_long_random_secret",
   "db_path": "panel.db",
   "admin_username": "admin",
-  "admin_password": "CHANGE_ME"
+  "admin_password": "CHANGE_ME",
+  "hidden_banks": []
 }

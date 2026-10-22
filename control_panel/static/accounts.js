@@ -104,7 +104,9 @@ function openAccountEdit(id, label, bank, uniqueId, shortname) {
   $("#acct-edit-label").textContent = label;
   const robotSel = $("#acct-edit-robot");
   robotSel.value = String(id);
-  form.bank.value = bank || "mybca";
+  const bankSel = form.bank;
+  const firstBank = Array.from(bankSel.options).find((opt) => opt.value);
+  bankSel.value = bank || (firstBank ? firstBank.value : "");
   form.unique_id.value = uniqueId || "";
   form.bank_shortname.value = shortname || "";
   form.username.value = "";

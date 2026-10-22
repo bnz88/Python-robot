@@ -66,10 +66,7 @@
         <div class="field"><span class="fl">Account</span>
           <select id="account-select">
             <option value="">all</option>
-            <option value="mybca">mybca</option>
-            <option value="klikbca">klikbca</option>
-            <option value="cimb">cimb</option>
-            <option value="permata">permata</option>
+            {% for bank in banks %}<option value="{{ bank }}">{{ bank }}</option>{% endfor %}
           </select>
         </div>
         <div class="field">

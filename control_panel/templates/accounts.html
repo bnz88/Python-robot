@@ -22,10 +22,7 @@
         <div class="field"><span class="fl">Bank</span>
           <select name="bank" required>
             <option value="">bank...</option>
-            <option value="mybca">mybca</option>
-            <option value="klikbca">klikbca</option>
-            <option value="cimb">cimb</option>
-            <option value="permata">permata</option>
+            {% for bank in banks %}<option value="{{ bank }}">{{ bank }}</option>{% endfor %}
           </select>
         </div>
         <div class="field"><span class="fl">Label</span>
@@ -82,10 +79,7 @@
       </div>
       <div class="field"><span class="fl">Bank</span>
         <select name="bank">
-          <option value="mybca">mybca</option>
-          <option value="klikbca">klikbca</option>
-          <option value="cimb">cimb</option>
-          <option value="permata">permata</option>
+          {% for bank in banks %}<option value="{{ bank }}">{{ bank }}</option>{% endfor %}
         </select>
       </div>
       <div class="field"><span class="fl">Unique ID</span>

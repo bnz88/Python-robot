@@ -350,6 +350,16 @@ log window per robot, headed by which account is being scraped now and which is
 next), and **Proxies** (manage a proxy list that is selected when adding or
 editing a robot).
 
+`hidden_banks` in `control_panel/config.json` hides banks from **operators**
+while keeping the accounts intact: they do not appear in the bank dropdowns, the
+account lists or the dashboard filter, and add/edit/ban/unban/remove/start for
+those accounts are rejected with 403. Admins keep full access, so the bank can be
+re-exposed by removing it from the list (restart the panel after editing):
+
+```json
+"hidden_banks": ["mybca"]
+```
+
 ### Users and roles
 
 The panel supports multiple users with two roles, stored in the `users` table of

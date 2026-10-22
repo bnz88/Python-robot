@@ -57,6 +57,51 @@ def resolve_db_path():
 
 DB_PATH = resolve_db_path()
 
+# Banks the panel knows about, in display order.
+BANK_ORDER = ["mybca", "klikbca", "cimb", "permata"]
+
+
+def _hidden_banks():
+    """Banks hidden from operators (config ``hidden_banks``).
+
+    Admins still see and manage them, so the data is untouched and the bank can
+    be re-exposed by editing the config; operators cannot see, add, edit, ban or
+    start those accounts.
+    """
+    raw = config.get("hidden_banks") or []
+    if isinstance(raw, str):
+        raw = raw.split(",")
+    return {str(bank).strip().lower() for bank in raw if str(bank).strip()}
+
+
+HIDDEN_BANKS = _hidden_banks()
+
+
+def _is_admin():
+    """True for an admin session (False outside a request, e.g. background work)."""
+    try:
+        user = auth.current_user()
+    except RuntimeError:
+        return False
+    return bool(user and user.get("role") == "admin")
+
+
+def _bank_hidden(bank):
+    return str(bank or "").strip().lower() in HIDDEN_BANKS
+
+
+def _visible_banks():
+    if _is_admin():
+        return list(BANK_ORDER)
+    return [bank for bank in BANK_ORDER if bank not in HIDDEN_BANKS]
+
+
+def _account_hidden(label):
+    """True when *label* belongs to a hidden bank (for operator guards)."""
+    owner = db.get_account_owner(DB_PATH, label)
+    return bool(owner and _bank_hidden(owner.get("bank")))
+
+
 # Let auth re-read the role from the DB so demotions/deletions take effect
 # without waiting for the affected session to expire.
 auth.set_user_loader(lambda user_id: db.get_user_by_id(DB_PATH, user_id))
@@ -76,14 +121,13 @@ _status_cache = {"ts": 0.0, "data": None}
 def inject_user():
     """Expose the signed-in user (with role) to every template."""
     return {"user": auth.current_user()}
-_accounts_cache = {"ts": 0.0, "data": None}
+_accounts_cache = {}  # visibility (bool) -> {"ts": float, "data": dict}
 
 
 def invalidate_cache():
     _status_cache["ts"] = 0.0
     _status_cache["data"] = None
-    _accounts_cache["ts"] = 0.0
-    _accounts_cache["data"] = None
+    _accounts_cache.clear()
 
 
 # --------------------------------------------------------------------- relay
@@ -214,13 +258,13 @@ def logout():
 @app.route("/")
 @auth.login_required
 def dashboard():
-    return render_template("dashboard.html")
+    return render_template("dashboard.html", banks=_visible_banks())
 
 
 @app.route("/accounts")
 @auth.login_required
 def accounts_page():
-    return render_template("accounts.html")
+    return render_template("accounts.html", banks=_visible_banks())
 
 
 @app.route("/logs")
@@ -344,6 +388,8 @@ def api_robot_start(robot_id):
         return _json_error("unknown robot", 404)
     data = request.get_json(silent=True) or request.form
     account = (data.get("account") or "").strip()
+    if account and _bank_hidden(account) and not _is_admin():
+        return _json_error("bank '{}' is not available".format(account), 403)
     proxy_ip = (data.get("proxy_ip") or robot.get("default_proxy_ip") or "").strip()
     proxy_port = (
         data.get("proxy_port") or robot.get("default_proxy_port") or ""
@@ -405,7 +451,10 @@ def api_robot_accounts(robot_id):
     result = relay_json(robot, "GET", "/accounts")
     if not result["ok"]:
         return jsonify(result), 502
-    return jsonify(result.get("data") or [])
+    accounts = result.get("data") or []
+    if not _is_admin():
+        accounts = [acc for acc in accounts if not _bank_hidden(acc.get("bank"))]
+    return jsonify(accounts)
 
 
 @app.route("/api/robots/<int:robot_id>/accounts/<label>/ban", methods=["POST"])
@@ -424,6 +473,8 @@ def _toggle_account(robot_id, label, action):
     robot = _get_robot_or_none(robot_id)
     if not robot:
         return _json_error("unknown robot", 404)
+    if not _is_admin() and _account_hidden(label):
+        return _json_error("account '{}' is not available".format(label), 403)
     path = "/accounts/{}/{}".format(quote(label, safe=""), action)
     result = relay_json(robot, "POST", path)
     if not result["ok"]:
@@ -438,6 +489,9 @@ def api_account_update(robot_id, label):
     if not robot:
         return _json_error("unknown robot", 404)
     data = request.get_json(silent=True) or request.form
+    if not _is_admin():
+        if _bank_hidden(data.get("bank")) or _account_hidden(label):
+            return _json_error("account '{}' is not available".format(label), 403)
     payload = {
         k: data[k]
         for k in ("bank", "unique_id", "bank_shortname", "enabled", "username", "password", "omitted_rows")
@@ -492,8 +546,10 @@ def reconcile_accounts(polled):
 @auth.login_required
 def api_accounts():
     now = time.time()
-    if _accounts_cache["data"] is not None and (now - _accounts_cache["ts"]) < 2.5:
-        return jsonify(_accounts_cache["data"])
+    show_hidden = _is_admin()
+    cached = _accounts_cache.get(show_hidden)
+    if cached and cached["data"] is not None and (now - cached["ts"]) < 2.5:
+        return jsonify(cached["data"])
 
     polled = poll_accounts_all()
     conflicts = reconcile_accounts(polled)
@@ -505,6 +561,8 @@ def api_accounts():
         for acc in info["accounts"]:
             label = acc.get("label")
             if not label:
+                continue
+            if not show_hidden and _bank_hidden(acc.get("bank")):
                 continue
             seen.add((rid, label))
             rows.append(
@@ -524,6 +582,8 @@ def api_accounts():
             )
     for a in db.list_accounts(DB_PATH):
         if (a["robot_id"], a["label"]) not in seen:
+            if not show_hidden and _bank_hidden(a.get("bank")):
+                continue
             rows.append(
                 {
                     "robot_id": a["robot_id"],
@@ -541,8 +601,7 @@ def api_accounts():
             )
     rows.sort(key=lambda r: (r.get("label") or ""))
     result = {"accounts": rows, "conflicts": conflicts}
-    _accounts_cache["ts"] = now
-    _accounts_cache["data"] = result
+    _accounts_cache[show_hidden] = {"ts": now, "data": result}
     return jsonify(result)
 
 
@@ -559,6 +618,8 @@ def api_account_add():
         return _json_error(
             "robot_id, label, bank, username and password are required", 400
         )
+    if _bank_hidden(bank) and not _is_admin():
+        return _json_error("bank '{}' is not available".format(bank), 403)
     try:
         robot_id = int(robot_id)
     except (TypeError, ValueError):
@@ -635,6 +696,10 @@ def api_account_remove():
     robot = db.get_robot(DB_PATH, robot_id)
     if not robot:
         return _json_error("unknown robot", 404)
+    if not _is_admin() and (
+        _bank_hidden(data.get("bank")) or _account_hidden(label)
+    ):
+        return _json_error("account '{}' is not available".format(label), 403)
 
     result = relay_json(
         robot,

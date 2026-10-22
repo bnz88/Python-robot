@@ -4,9 +4,7 @@ output/
 __pycache__/
 *.pyc
 control_panel/panel.db
-assets/*.png
-assets/klikbca/*.png
-assets/mybca/*.png
+assets/
 dataset/permata/misses/
 
 .venv/

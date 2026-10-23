@@ -13,6 +13,7 @@
   <main>
     <p id="status" class="status"></p>
 
+    {% if user and user.role == 'admin' %}
     <section class="panel">
       <h2>Add proxy</h2>
       <form id="add-proxy-form" class="add-account">
@@ -29,6 +30,7 @@
       </form>
       <p class="hint">Proxies here can be selected when adding or editing a robot.</p>
     </section>
+    {% endif %}
 
     <section class="panel">
       <h2>Test connection</h2>

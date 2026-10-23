@@ -17,7 +17,7 @@ name.
 | View Dashboard, Live Logs, Live, Accounts, Proxies | ✅ | ✅ |
 | Start / Stop robots, Jump Next, Ban / Unban, View statement | ✅ | ✅ |
 | Add / Edit / Remove accounts | ✅ | ✅ |
-| Add / Edit / Delete proxies | ✅ | ✅ |
+| Add / Edit / Delete proxies | ✅ | ❌ |
 | Run the proxy connection test | ✅ | ✅ |
 | Add / Edit / Delete **robots** | ✅ | ❌ |
 | Open the **Settings** page | ✅ | ❌ |
@@ -94,7 +94,7 @@ After clicking **Select**, you get:
 
 | Column | Meaning |
 |---|---|
-| Label | The account name (also the output filename) |
+| Label | The account name (also the output filename); a small bank icon is shown to its left |
 | Bank | `mybca`, `klikbca`, `cimb`, or `permata` |
 | Unique ID / Shortname | Data sent to the backoffice |
 | Enabled | `yes` / `no` (a banned account is `no`) |
@@ -109,9 +109,11 @@ Account action buttons:
 |---|---|
 | **Jump Next** | Scrape this account next, once (a one-time priority) |
 | **View** | Show the last saved statement text |
-| **Ban** | Temporarily disable the account (kept, but skipped) |
-| **Unban** | Re-enable a banned account |
-| **Remove** | Delete the account from this robot |
+| **Ban** | Temporarily disable the account (kept, but skipped) — green button |
+| **Unban** | Re-enable a banned account — red button |
+
+Removing an account is only possible on the **Accounts** page (not from the
+Dashboard), so accounts cannot be deleted by accident while monitoring a run.
 
 ### 3.5 Omitted rows
 
@@ -185,10 +187,13 @@ robot is on the right page.
 
 ## 7. Proxies
 
-Manage a reusable list of proxies (IP, Port, Note).
+Manage a reusable list of proxies (IP, Port, Note). Adding and removing is
+**admin only**; operators see the list, can run **Test Connection** and use the
+proxies from the Dashboard, but the Add panel and Remove buttons are hidden for
+them (and the API returns 403).
 
-- **Add**: fill IP, Port and an optional Note, click **Add**.
-- **Remove**: delete a proxy from the list.
+- **Add** (admin): fill IP, Port and an optional Note, click **Add**.
+- **Remove** (admin): delete a proxy from the list.
 - On the Dashboard pick **Auto** (fastest proxy per account, the default) or one
   specific proxy to use for that run.
 - **Auto mode**: **once**, at the start of the run, the robot measures every bank

@@ -107,7 +107,7 @@ function renderAccounts(accounts) {
       tr.classList.add("row-next");
     }
     tr.innerHTML = `
-      <td>${esc(a.label)}</td>
+      <td class="label-cell">${bankIcon(a.bank)}${esc(a.label)}</td>
       <td>${esc(a.bank || "")}</td>
       <td>${esc(a.unique_id ?? "")}</td>
       <td>${esc(a.bank_shortname ?? "")}</td>
@@ -123,7 +123,6 @@ function renderAccounts(accounts) {
             ? `<button class="btn-ban" data-act="ban" data-label="${esc(a.label)}">Ban</button>`
             : `<button class="btn-unban" data-act="unban" data-label="${esc(a.label)}">Unban</button>`
         }
-        <button data-act="remove" data-label="${esc(a.label)}">Remove</button>
       </td>`;
     tbody.appendChild(tr);
   }
@@ -200,18 +199,6 @@ async function toggleAccount(label, action) {
   if (!id) return;
   try {
     await post(`/api/robots/${id}/accounts/${encodeURIComponent(label)}/${action}`);
-  } catch (err) {
-    setStatus(err.message, true);
-  }
-  await loadAccounts();
-}
-
-async function removeAccount(label) {
-  const id = state.selectedId;
-  if (!id) return;
-  if (!confirm(`Remove account "${label}" from this robot?`)) return;
-  try {
-    await post("/api/accounts/remove", { robot_id: id, label });
   } catch (err) {
     setStatus(err.message, true);
   }
@@ -442,7 +429,6 @@ async function onAccountAction(e) {
   if (act === "ban") await toggleAccount(label, "ban");
   else if (act === "unban") await toggleAccount(label, "unban");
   else if (act === "view") await viewStatement(label, bank);
-  else if (act === "remove") await removeAccount(label);
   else if (act === "next") await jumpNextAccount(label);
 }
 

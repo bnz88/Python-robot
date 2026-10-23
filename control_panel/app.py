@@ -755,6 +755,8 @@ def api_proxies():
 @app.route("/api/proxies", methods=["POST"])
 @auth.login_required
 def api_proxy_add():
+    if not _is_admin():
+        return _json_error("only admins can add proxies", 403)
     data = request.get_json(silent=True) or request.form
     ip = (data.get("ip") or "").strip()
     port = data.get("port")
@@ -772,6 +774,8 @@ def api_proxy_add():
 @app.route("/api/proxies/<int:pid>/delete", methods=["POST"])
 @auth.login_required
 def api_proxy_delete(pid):
+    if not _is_admin():
+        return _json_error("only admins can remove proxies", 403)
     db.delete_proxy(DB_PATH, pid)
     invalidate_cache()
     return jsonify({"ok": True})

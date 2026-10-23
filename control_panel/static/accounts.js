@@ -37,12 +37,12 @@ function renderAccounts(accounts) {
       : "-";
     let toggleBtn = "";
     if (a.enabled === false) {
-      toggleBtn = `<button data-act="unban" data-id="${a.robot_id}" data-label="${esc(a.label)}">Unban</button>`;
+      toggleBtn = `<button class="btn-unban" data-act="unban" data-id="${a.robot_id}" data-label="${esc(a.label)}">Unban</button>`;
     } else if (a.enabled === true) {
-      toggleBtn = `<button data-act="ban" data-id="${a.robot_id}" data-label="${esc(a.label)}">Ban</button>`;
+      toggleBtn = `<button class="btn-ban" data-act="ban" data-id="${a.robot_id}" data-label="${esc(a.label)}">Ban</button>`;
     }
     tr.innerHTML = `
-      <td>${esc(a.label)}${a.conflict ? ' <span class="warn">(conflict)</span>' : ""}</td>
+      <td class="label-cell">${bankIcon(a.bank)}${esc(a.label)}${a.conflict ? ' <span class="warn">(conflict)</span>' : ""}</td>
       <td>${esc(a.robot_name || a.robot_id)}${a.reachable ? "" : " <span class='warn'>(offline)</span>"}</td>
       <td>${esc(a.bank || "")}</td>
       <td>${esc(a.unique_id ?? "")}</td>

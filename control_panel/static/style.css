@@ -306,6 +306,8 @@ button.btn-ban {
   border-color: var(--ok);
   color: #ffffff;
   font-weight: 600;
+  min-width: 64px;
+  text-align: center;
 }
 
 button.btn-ban:hover { border-color: var(--text); }
@@ -315,9 +317,25 @@ button.btn-unban {
   border-color: var(--bad);
   color: #ffffff;
   font-weight: 600;
+  min-width: 64px;
+  text-align: center;
 }
 
 button.btn-unban:hover { border-color: var(--text); }
+
+.bank-icon {
+  width: 22px;
+  height: 22px;
+  margin-right: 8px;
+  border-radius: 5px;
+  vertical-align: middle;
+  flex: 0 0 auto;
+}
+
+td.label-cell {
+  white-space: nowrap;
+  vertical-align: middle;
+}
 
 #live-panel .panel-head {
   margin-bottom: 15px;

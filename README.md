@@ -369,13 +369,19 @@ Panel configuration lives in `control_panel/config.json` (`panel_host`,
 `admin_password`). Robots are added from the dashboard UI; each robot's token is
 stored in `control_panel/panel.db` (never account credentials). The panel has
 three pages: **Dashboard** (robot status + start/stop + per-robot logs + a live
-feed of the selected robot with start/stop and an enlarge button),
-**Accounts** (add/remove bank accounts across robots — each label is globally
+feed of the selected robot with start/stop and an enlarge button; its account
+table shows the bank icon left of each Label, a Ban/Unban toggle and no Remove
+button — accounts are removed on the Accounts page only), **Accounts**
+(add/remove bank accounts across robots — each label is globally
 unique and can belong to only one robot), **Live Logs** (one auto-refreshing
 log window per robot, headed by which account is being scraped now and which is
-next), and **Proxies** (manage a proxy list that is selected when adding or
-editing a robot, plus a per-robot **Test Connection** that measures
-robot → proxy → bank-login latency).
+next), and **Proxies** (admins manage the proxy list used when adding or editing
+a robot, plus a per-robot **Test Connection** that measures
+robot → proxy → bank-login latency; operators can view the list and run the test).
+
+Bank icons are small SVGs in `control_panel/static/bank-icons/` (`mybca.svg`,
+`klikbca.svg`, `cimb.svg`, `permata.svg`), shown at 22 px left of the Label on the
+Dashboard and Accounts pages — replace those files to use your own artwork.
 
 `hidden_banks` in `control_panel/config.json` hides banks from **operators**
 while keeping the accounts intact: they do not appear in the bank dropdowns, the
@@ -395,8 +401,8 @@ The panel supports multiple users with two roles, stored in the `users` table of
 - **admin** — full access, including the **Settings** page (per-robot
   `config.json`), the **Users** page, and adding/editing/deleting robots.
 - **operator** — can run robots (start/stop/jump next), manage accounts,
-  view live logs/live view, and manage proxies, but cannot open **Settings** or
-  add/edit/delete robots.
+  view live logs/live view, and view proxies + run the connection test, but
+  cannot add/remove proxies, open **Settings** or add/edit/delete robots.
 
 Users are managed on the **Users** page (admin only) or via `/api/users`. The
 configured `admin_username` is always seeded as an **admin**; new users default

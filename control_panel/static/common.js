@@ -12,6 +12,22 @@ function $(sel) {
   return document.querySelector(sel);
 }
 
+const BANK_ICONS = {
+  mybca: { label: "myBCA", file: "mybca.svg" },
+  klikbca: { label: "KlikBCA", file: "klikbca.svg" },
+  cimb: { label: "CIMB", file: "cimb.svg" },
+  permata: { label: "Permata", file: "permata.svg" },
+};
+
+function bankIcon(bank) {
+  const info = BANK_ICONS[String(bank || "").toLowerCase()];
+  if (!info) return "";
+  return (
+    `<img class="bank-icon" src="/static/bank-icons/${info.file}"` +
+    ` alt="${esc(info.label)}" title="${esc(info.label)}">`
+  );
+}
+
 async function api(url, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (options.body && typeof options.body !== "string") {

@@ -1,5 +1,7 @@
 "use strict";
 
+const IS_ADMIN = window.PANEL_ROLE === "admin";
+
 async function loadProxies() {
   const proxies = await get("/api/proxies");
   renderProxies(proxies);
@@ -15,7 +17,11 @@ function renderProxies(proxies) {
       <td>${esc(p.ip)}</td>
       <td>${esc(String(p.port))}</td>
       <td>${esc(p.note || "")}</td>
-      <td><button data-act="remove" data-id="${p.id}" data-label="${esc(String(p.ip) + ":" + String(p.port))}">Remove</button></td>`;
+      <td>${
+        IS_ADMIN
+          ? `<button data-act="remove" data-id="${p.id}" data-label="${esc(String(p.ip) + ":" + String(p.port))}">Remove</button>`
+          : ""
+      }</td>`;
     tbody.appendChild(tr);
   }
 }
@@ -95,7 +101,7 @@ async function onAction(e) {
   const btn = e.target.closest("button[data-act]");
   if (!btn) return;
   const { act, id, label } = btn.dataset;
-  if (act !== "remove") return;
+  if (act !== "remove" || !IS_ADMIN) return;
   if (!confirm(`Remove proxy ${label}?`)) return;
   setStatus("Removing proxy...");
   try {
@@ -126,7 +132,10 @@ async function submitAdd(e) {
 }
 
 function init() {
-  $("#add-proxy-form").addEventListener("submit", submitAdd);
+  const addForm = $("#add-proxy-form");
+  if (addForm) {
+    addForm.addEventListener("submit", submitAdd);
+  }
   $("#proxies-table tbody").addEventListener("click", onAction);
   $("#test-run").addEventListener("click", runTest);
   loadProxies();

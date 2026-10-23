@@ -324,10 +324,11 @@ button.btn-unban {
 button.btn-unban:hover { border-color: var(--text); }
 
 .bank-icon {
-  width: 22px;
-  height: 22px;
-  margin-right: 8px;
-  border-radius: 5px;
+  width: 80px;
+  height: 24px;
+  margin-right: 10px;
+  object-fit: contain;
+  object-position: left center;
   vertical-align: middle;
   flex: 0 0 auto;
 }

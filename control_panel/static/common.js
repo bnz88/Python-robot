@@ -13,10 +13,10 @@ function $(sel) {
 }
 
 const BANK_ICONS = {
-  mybca: { label: "myBCA", file: "mybca.svg" },
-  klikbca: { label: "KlikBCA", file: "klikbca.svg" },
-  cimb: { label: "CIMB", file: "cimb.svg" },
-  permata: { label: "Permata", file: "permata.svg" },
+  mybca: { label: "Bank BCA", file: "bca.svg" },
+  klikbca: { label: "Bank BCA", file: "bca.svg" },
+  cimb: { label: "CIMB Niaga", file: "cimb.svg" },
+  permata: { label: "Permata Bank", file: "permata.svg" },
 };
 
 function bankIcon(bank) {

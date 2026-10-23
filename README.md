@@ -379,9 +379,11 @@ next), and **Proxies** (admins manage the proxy list used when adding or editing
 a robot, plus a per-robot **Test Connection** that measures
 robot → proxy → bank-login latency; operators can view the list and run the test).
 
-Bank icons are small SVGs in `control_panel/static/bank-icons/` (`mybca.svg`,
-`klikbca.svg`, `cimb.svg`, `permata.svg`), shown at 22 px left of the Label on the
-Dashboard and Accounts pages — replace those files to use your own artwork.
+Bank logos live in `control_panel/static/bank-icons/` (`bca.svg` for both myBCA and
+KlikBCA, `cimb.svg` for CIMB Niaga, `permata.svg` for Permata) and are shown 24 px
+high, left of the Label, on the Dashboard and Accounts pages. The files were taken
+from Wikimedia Commons; bank logos are trademarks of their owners, so keep this
+panel internal — replace the files with your own artwork if needed.
 
 `hidden_banks` in `control_panel/config.json` hides banks from **operators**
 while keeping the accounts intact: they do not appear in the bank dropdowns, the

@@ -116,7 +116,7 @@ class Permata:
                 image, score
             )
         )
-        close_wait = self.config.get("permata_close_wait", 3.0)
+        close_wait = self.config.get("permata_close_wait", 5.0)
         log("[permata] waiting {:.1f}s before closing the modal".format(close_wait))
         time.sleep(close_wait)
         self.driver.click_at(center)

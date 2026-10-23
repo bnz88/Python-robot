@@ -126,7 +126,7 @@ CONFIG_SCHEMA = [
             {"key": "permata_login_url", "label": "Login URL", "type": "text", "default": "https://www.permatanet.com/pnet/"},
             {"key": "permata_statement_url", "label": "Statement URL", "type": "text", "default": "https://www.permatanet.com/pnet/saving-detail/IDR#mutation"},
             {"key": "permata_close_button", "label": "Landing close button image", "type": "text", "default": "close_button.JPG", "help": "Image inside assets/permata for the landing-page modal close button."},
-            {"key": "permata_close_wait", "label": "Close button wait (s)", "type": "float", "default": 3.0, "help": "Seconds to wait after the close button is found before clicking it."},
+            {"key": "permata_close_wait", "label": "Close button wait (s)", "type": "float", "default": 5.0, "help": "Seconds to wait after the close button is found before clicking it."},
             {"key": "permata_user_id_images", "label": "Username field images", "type": "csv", "default": ["user_id1.JPG", "user_id2.JPG"], "help": "Comma-separated image names inside assets/permata; the first match is clicked to focus the username field (e.g. Indonesian/English labels)."},
             {"key": "permata_user_icon", "label": "User icon image", "type": "text", "default": "user_icon.JPG", "help": "Login gate (also the logout menu opener). Its middle letters vary; matched at the icon confidence."},
             {"key": "permata_icon_confidence", "label": "User icon confidence", "type": "float", "default": 0.7, "min": 0, "max": 1, "help": "Match threshold for the user icon (lower because its middle letters change)."},

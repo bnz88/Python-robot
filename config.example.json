@@ -84,7 +84,7 @@
   "permata_login_url": "https://www.permatanet.com/pnet/",
   "permata_statement_url": "https://www.permatanet.com/pnet/saving-detail/IDR#mutation",
   "permata_close_button": "close_button.JPG",
-  "permata_close_wait": 3.0,
+  "permata_close_wait": 5.0,
   "permata_user_id_images": [
     "user_id1.JPG",
     "user_id2.JPG"

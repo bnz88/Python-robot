@@ -151,13 +151,17 @@ class Permata:
         )
 
     def _login(self, username, password):
-        """Type credentials, solve the captcha by OCR, submit, retry on failure.
+        """Type credentials, solve the captcha, retry by watching the captcha image.
 
-        Each attempt OCRs the captcha, types it and submits. PERMATA refreshes
-        the captcha image itself after a rejected login (the page is not
-        reloaded), so a retry only clears the stale code from the field, solves
-        the new image and types it. After ``permata_captcha_attempts``
-        failures the account is aborted.
+        Sequence per attempt: solve the captcha, type it, press Enter, wait
+        ``permata_captcha_check_wait`` (3 s) and look for ``captcha.JPG`` again.
+        Still visible means the login was rejected, so after
+        ``permata_captcha_retry_wait`` (2 s) Shift+Tab moves focus back to the
+        captcha field, the refreshed image is solved and Enter is pressed again.
+        At least three attempts are made (``permata_captcha_attempts`` can raise
+        it); when the captcha is gone the dashboard gate confirms the login.
+        Exhausting the attempts raises ``ScrapeAborted`` so main.py clears the
+        cooldown and leaves the account un-flagged for another pass.
         """
         login_wait = self.config.get("permata_login_wait", 5.0)
         log("[permata] waiting {:.1f}s for the login form".format(login_wait))
@@ -165,9 +169,10 @@ class Permata:
 
         self._fill_credentials(username, password)
 
-        attempts = self.config.get("permata_captcha_attempts", 2)
-        dashboard_wait = self.config.get("permata_dashboard_wait", 7.0)
-        retry_wait = self.config.get("permata_captcha_retry_wait", 3.0)
+        attempts = max(3, int(self.config.get("permata_captcha_attempts", 3)))
+        check_wait = float(self.config.get("permata_captcha_check_wait", 3.0))
+        retry_wait = float(self.config.get("permata_captcha_retry_wait", 2.0))
+        shift_tabs = int(self.config.get("permata_captcha_shift_tabs", 1))
         for attempt in range(1, attempts + 1):
             # Drop any sample from a previous (rejected) attempt so that, on
             # success, only the captcha actually submitted gets labeled.
@@ -185,27 +190,55 @@ class Permata:
                     )
                 )
             self.driver.press_enter()
-            # Wait for the login to resolve. After a failed attempt the next
-            # captcha only needs a short pause, so use the shorter retry wait
-            # until the final attempt, which keeps the full dashboard wait.
-            wait = retry_wait if attempt < attempts else dashboard_wait
-            log("[permata] waiting {:.1f}s for login result".format(wait))
-            time.sleep(wait)
+
+            log(
+                "[permata] waiting {:.1f}s to check whether the captcha is gone".format(
+                    check_wait
+                )
+            )
+            time.sleep(check_wait)
+            if self._captcha_visible():
+                log(
+                    "[permata] attempt {}/{}: captcha still shown - login "
+                    "rejected".format(attempt, attempts)
+                )
+                if attempt < attempts:
+                    log(
+                        "[permata] waiting {:.1f}s, then Shift+Tab back to the "
+                        "captcha field".format(retry_wait)
+                    )
+                    time.sleep(retry_wait)
+                    self.driver.shift_tab(shift_tabs)
+                continue
+
+            # The captcha disappeared, so the site accepted the credentials.
             if self._logged_in():
                 log("[permata] logged in on attempt {}".format(attempt))
                 self._confirm_captcha_sample()
                 self.driver.handle_challenge()
                 return
-            log("[permata] login not confirmed on attempt {}".format(attempt))
-            if attempt < attempts:
-                # Only the captcha image is refreshed by the site; the page and
-                # the credentials stay, so just clear the rejected code.
-                log("[permata] site refreshed the captcha; clearing the field")
-                self.driver.clear_focused_field()
+            log(
+                "[permata] captcha cleared but the dashboard gate was not found; "
+                "stopping this account"
+            )
+            raise ScrapeAborted(
+                "permata login accepted but the dashboard gate was not found"
+            )
 
         raise ScrapeAborted(
             "permata login failed after {} captcha attempt(s)".format(attempts)
         )
+
+    def _captcha_visible(self):
+        """True while the captcha image is still on screen (login not accepted)."""
+        image = self.config.get("permata_captcha_image", "captcha.JPG")
+        center, _score = self.driver.locate_image(
+            image,
+            timeout=1.0,
+            confidence=self.config.get("permata_captcha_confidence", 0.5),
+            scales=self._scales(),
+        )
+        return center is not None
 
     def _fill_credentials(self, username, password):
         """Focus the username field image, type both credentials, Tab to captcha.

@@ -583,6 +583,13 @@ class ChromeDriver:
             pyautogui.press("tab")
             time.sleep(0.15)
 
+    def shift_tab(self, count=1):
+        """Shift+Tab *count* times, moving focus one control backwards each time."""
+        self.ensure_foreground()
+        for _ in range(max(1, int(count))):
+            pyautogui.hotkey("shift", "tab")
+            time.sleep(0.05)
+
     def press_enter(self):
         self.ensure_foreground()
         pyautogui.press("enter")

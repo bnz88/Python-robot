@@ -22,15 +22,16 @@ so no WebDriver fingerprint is exposed.
 
 > PERMATA (`permata`) flow: close the landing modal, log in (click the username
 > field image, type username/password, solve the case-sensitive 4-character image
-> captcha — Tesseract-first, training-free, see below). The site refreshes the
-> captcha image itself after a rejected login and keeps the page, so a retry only
-> clears the rejected code from the field and solves the new image — no reload and
-> no refresh button; up to `permata_captcha_attempts` attempts run, a failed
-> intermediate attempt waits `permata_captcha_retry_wait` (3s), and the final
-> attempt waits the full `permata_dashboard_wait`, then confirm login by the
-> user-icon gate (`assets/permata/user_icon.JPG`; its middle letters vary). If the
-> icon is not found the account is aborted (nothing saved, cooldown cleared, next
-> account). On success it opens the statement URL, finds the `ind_flag.JPG` flag —
+> captcha — Tesseract-first, training-free, see below). After Enter it waits
+> `permata_captcha_check_wait` (3 s) and looks for `captcha.JPG` again: still
+> visible means the captcha was wrong, so it waits `permata_captcha_retry_wait`
+> (2 s), presses Shift+Tab to put focus back on the captcha field, solves the
+> refreshed image and presses Enter again. At least 3 attempts run
+> (`permata_captcha_attempts`); when the captcha is gone the dashboard gate
+> (`permata_user_icon`) confirms the login. If all attempts fail the account is
+> aborted and its cooldown is cleared, so it is not flagged as scraped and comes
+> back on the next pass. On success it opens the statement URL, finds the
+> `ind_flag.JPG` flag —
 > the page ignores the mouse wheel, so it scrolls one screen at a time with
 > `PageDown` (falling back to clicking the page once and re-trying `PageDown`,
 > then the wheel and arrow keys), up to `permata_scroll_max_steps` (20) times,

@@ -18,6 +18,7 @@ name.
 | Start / Stop robots, Jump Next, Ban / Unban, View statement | ✅ | ✅ |
 | Add / Edit / Remove accounts | ✅ | ✅ |
 | Add / Edit / Delete proxies | ✅ | ✅ |
+| Run the proxy connection test | ✅ | ✅ |
 | Add / Edit / Delete **robots** | ✅ | ❌ |
 | Open the **Settings** page | ✅ | ❌ |
 | Open the **Users** page | ✅ | ❌ |
@@ -187,6 +188,12 @@ Manage a reusable list of proxies (IP, Port, Note).
 - **Remove**: delete a proxy from the list.
 - On the Dashboard (or when adding/editing a robot) pick a proxy from the **Proxy**
   dropdown to use it for that run.
+- **Test Connection**: pick a **Robot**, then click **Test Connection**. The robot
+  measures its own latency to every bank login page through every proxy and the
+  result table shows milliseconds per proxy × bank. Green = the proxy reached the
+  page within the slow threshold (`proxy_test_slow_ms`, Settings → General,
+  default 1000 ms); red = too slow, timed out or could not connect. The test runs
+  on the selected robot, so it reflects that robot's network path.
 
 ---
 
@@ -205,7 +212,7 @@ Tabs:
 
 | Tab | Contains |
 |---|---|
-| **General** | Cooldown, waits/delays, image timeout & confidence, loop forever, window size, output folder, live feed |
+| **General** | Cooldown, waits/delays, image timeout & confidence, proxy slow threshold, loop forever, window size, output folder, live feed |
 | **myBCA** | Login/statement URLs and waits, logout coordinates |
 | **KlikBCA** | Login URL, page/menu/statement waits, tab counts, button images |
 | **CIMB** | Login/statement URLs, waits, reference images |

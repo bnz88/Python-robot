@@ -15,14 +15,19 @@ Run:
 Host/port come from config.json (``api_host``, ``api_port``).
 """
 
+import concurrent.futures
 import json
 import os
 import signal
+import socket
+import ssl
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -31,6 +36,110 @@ from utils.output import log, sanitize_label
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 KNOWN_BANKS = ("klikbca", "mybca", "cimb", "permata")
+
+# Bank login URLs used by the proxy connection test (config key per bank).
+BANK_LOGIN_URL_KEYS = (
+    ("mybca", "myBCA", "mybca_login_url"),
+    ("klikbca", "KlikBCA", "klikbca_login_url"),
+    ("cimb", "CIMB", "cimb_login_url"),
+    ("permata", "Permata", "permata_login_url"),
+)
+PROXY_TEST_TIMEOUT = 5.0
+
+
+def _classify_proxy_error(exc):
+    """Short label for a proxy/HTTP failure (timeout, tls, connection)."""
+    text = str(exc).lower()
+    if isinstance(exc, socket.timeout) or "timed out" in text:
+        return "timeout"
+    if isinstance(exc, ssl.SSLError) or "ssl" in text or "certificate" in text:
+        return "tls"
+    return "connection"
+
+
+def test_connections(config, proxies):
+    """Build the proxy x bank-login latency matrix.
+
+    *proxies* is a list of ``{"id", "ip", "port"}``. Each proxy is tested
+    against every configured bank login URL, in parallel. Returns
+    ``{"ok": True, "threshold_ms", "banks", "proxies"}`` or ``{"error": ...}``
+    when no bank URL is configured.
+    """
+    banks = []
+    for key, label, config_key in BANK_LOGIN_URL_KEYS:
+        url = str(config.get(config_key) or "").strip()
+        if url:
+            banks.append({"key": key, "label": label, "url": url})
+    if not banks:
+        return {"error": "no bank login URLs configured"}
+
+    try:
+        threshold = int(config.get("proxy_test_slow_ms", 1000))
+    except (TypeError, ValueError):
+        threshold = 1000
+
+    results = [
+        {
+            "id": proxy.get("id"),
+            "host": "{}:{}".format(proxy["ip"], proxy["port"]),
+            "results": {},
+        }
+        for proxy in proxies
+    ]
+    workers = max(1, min(40, len(proxies) * len(banks)))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        jobs = []
+        for index, proxy in enumerate(proxies):
+            for bank in banks:
+                future = pool.submit(
+                    measure_proxy_latency, bank["url"], proxy["ip"], proxy["port"]
+                )
+                jobs.append((future, index, bank["key"]))
+        for future, index, bank_key in jobs:
+            cell = future.result()
+            if cell.get("ok"):
+                cell["slow"] = int(cell.get("latency_ms", 0)) > threshold
+            results[index]["results"][bank_key] = cell
+
+    return {
+        "ok": True,
+        "threshold_ms": threshold,
+        "banks": banks,
+        "proxies": results,
+    }
+
+
+def measure_proxy_latency(url, ip, port, timeout=PROXY_TEST_TIMEOUT):
+    """Round-trip latency (ms) from this machine to *url* through a proxy.
+
+    Returns ``{"ok": True, "latency_ms": int}`` or
+    ``{"ok": False, "error": "timeout"|"tls"|"connection"}``. An HTTP error
+    status still counts as success: the proxy reached the site, which is what
+    this test measures.
+    """
+    proxy_url = "http://{}:{}".format(ip, port)
+    handler = urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
+    opener = urllib.request.build_opener(handler)
+    request = urllib.request.Request(
+        url, method="GET", headers={"User-Agent": "Mozilla/5.0"}
+    )
+    started = time.perf_counter()
+    try:
+        response = opener.open(request, timeout=timeout)
+    except urllib.error.HTTPError as exc:
+        elapsed = int(round((time.perf_counter() - started) * 1000))
+        if exc.code == 407:
+            # The proxy itself refused: no credentials are supported.
+            return {"ok": False, "error": "auth required"}
+        return {"ok": True, "latency_ms": elapsed}
+    except Exception as exc:  # noqa: BLE001 - classified into a short label
+        return {"ok": False, "error": _classify_proxy_error(exc)}
+    try:
+        response.close()
+    except Exception:
+        pass
+    elapsed = int(round((time.perf_counter() - started) * 1000))
+    return {"ok": True, "latency_ms": elapsed}
 
 # Settings exposed to the panel, grouped into tabs. Each field is
 # {"key", "label", "type", "default", ...}. Nested keys use dots (e.g.
@@ -49,6 +158,7 @@ CONFIG_SCHEMA = [
             {"key": "page_load_wait", "label": "Page load wait (s)", "type": "float", "default": 4.0},
             {"key": "image_timeout", "label": "Image click timeout (s)", "type": "int", "default": 15},
             {"key": "image_confidence", "label": "Image match confidence", "type": "float", "default": 0.85, "min": 0, "max": 1},
+            {"key": "proxy_test_slow_ms", "label": "Proxy slow threshold (ms)", "type": "int", "default": 1000, "min": 1, "help": "Latency above this marks a proxy result as slow (red) in the Proxies page connection test."},
             {"key": "stop_timeout", "label": "Stop/kill timeout (s)", "type": "int", "default": 20},
             {"key": "loop_forever", "label": "Loop forever", "type": "bool", "default": True},
             {"key": "window_width", "label": "Window width (px)", "type": "int", "default": 1280},
@@ -523,6 +633,12 @@ class StatementHandler(BaseHTTPRequestHandler):
         if path == "control/stop":
             self._send_json(200, self.manager.stop())
             return True
+        if path == "control/test_connections":
+            if self.command == "POST":
+                self._test_connections()
+            else:
+                self._send_json(405, {"error": "use POST"})
+            return True
         if path == "next" and self.command == "POST":
             label = (query.get("label") or [None])[0]
             if not label:
@@ -599,6 +715,47 @@ class StatementHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+    # ------------------------------------------------------------------ proxy test
+    def _test_connections(self):
+        """Measure robot -> proxy -> bank-login latency for the given proxies.
+
+        Body: ``{"proxies": [{"id": 1, "ip": "1.2.3.4", "port": 3128}, ...]}``.
+        Every proxy is tested against every configured bank login URL in
+        parallel; each cell reports ``latency_ms`` (and ``slow`` according to
+        ``proxy_test_slow_ms``) or an ``error`` label.
+        """
+        body = self._read_json_body()
+        if not isinstance(body, dict):
+            self._send_json(400, {"error": "expected a JSON object body"})
+            return
+
+        proxies = []
+        for item in body.get("proxies") or []:
+            if not isinstance(item, dict):
+                continue
+            ip = str(item.get("ip") or "").strip()
+            try:
+                port = int(item.get("port"))
+            except (TypeError, ValueError):
+                continue
+            if not ip or not 0 < port < 65536:
+                continue
+            proxies.append({"id": item.get("id"), "ip": ip, "port": port})
+        if not proxies:
+            self._send_json(400, {"error": "no valid proxies to test"})
+            return
+
+        outcome = test_connections(self.config, proxies)
+        if outcome.get("error"):
+            self._send_json(400, outcome)
+            return
+        log(
+            "[api] proxy connection test: {} proxy(ies) x {} bank(s), slow > {} ms".format(
+                len(proxies), len(outcome.get("banks") or []), outcome["threshold_ms"]
+            )
+        )
+        self._send_json(200, outcome)
 
     # ------------------------------------------------------------------ accounts
     def _accounts_list(self):
@@ -1023,7 +1180,7 @@ def main():
     StatementHandler.manager = ProcessManager(BASE_DIR, config)
     server = ThreadingHTTPServer((host, port), StatementHandler)
     log("robot API listening on http://{}:{}/".format(host, port))
-    log("routes: /health, /<bank>/<label>, /accounts, /config, /control/start|stop|status|log")
+    log("routes: /health, /<bank>/<label>, /accounts, /config, /control/start|stop|status|log|test_connections")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

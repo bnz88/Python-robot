@@ -120,6 +120,9 @@ missing.
      `live_refresh_ms` in `control_panel/config.json` (default 1000 ms).
    - `tabs_to_username` — number of Tab presses to reach the username field after focusing the page (1 by default; tune per site if login types into the wrong field).
    - `image_confidence` — OpenCV match threshold for the submit/menu buttons.
+   - `proxy_test_slow_ms` — latency above this (ms, default `1000`) is shown in
+     red on the Proxies page's **Test Connection** table; anything faster, with
+     the proxy reaching the bank login page, is green.
    - `between_accounts_wait` — seconds to wait after closing Chrome before the next account starts.
    - `account_cooldown_seconds` — minimum seconds between scrapes of the same account (180 = 3 minutes).
    - `python_exe` — python to use for `/control/start` (defaults to the interpreter running `api.py`).
@@ -356,7 +359,8 @@ feed of the selected robot with start/stop and an enlarge button),
 unique and can belong to only one robot), **Live Logs** (one auto-refreshing
 log window per robot, headed by which account is being scraped now and which is
 next), and **Proxies** (manage a proxy list that is selected when adding or
-editing a robot).
+editing a robot, plus a per-robot **Test Connection** that measures
+robot → proxy → bank-login latency).
 
 `hidden_banks` in `control_panel/config.json` hides banks from **operators**
 while keeping the accounts intact: they do not appear in the bank dropdowns, the

@@ -762,6 +762,41 @@ def api_proxy_delete(pid):
     return jsonify({"ok": True})
 
 
+@app.route("/api/proxies/test", methods=["POST"])
+@auth.login_required
+def api_proxy_test():
+    """Measure robot -> proxy -> bank-login latency on the chosen robot."""
+    data = request.get_json(silent=True) or {}
+    robot_id = data.get("robot_id")
+    robot = db.get_robot(DB_PATH, robot_id) if robot_id else None
+    if not robot:
+        return _json_error("unknown robot", 404)
+    proxies = db.list_proxies(DB_PATH)
+    if not proxies:
+        return _json_error("no proxies configured", 400)
+
+    payload = {
+        "proxies": [
+            {"id": p["id"], "ip": p["ip"], "port": p["port"]} for p in proxies
+        ]
+    }
+    result = relay_json(
+        robot,
+        "POST",
+        "/control/test_connections",
+        json=payload,
+        timeout=60.0,
+    )
+    if not result["ok"]:
+        return _json_error(result.get("error") or "robot unreachable", 502)
+    body = result.get("data")
+    if not isinstance(body, dict):
+        return _json_error("invalid response from robot", 502)
+    if body.get("error"):
+        return _json_error(body["error"], 400)
+    return jsonify(body)
+
+
 # --------------------------------------------------------------- statement
 @app.route("/api/robots/<int:robot_id>/statement/<label>")
 @auth.login_required

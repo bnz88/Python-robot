@@ -31,6 +31,25 @@
     </section>
 
     <section class="panel">
+      <h2>Test connection</h2>
+      <div class="controls">
+        <div class="field"><span class="fl">Robot</span>
+          <select id="test-robot"></select>
+        </div>
+        <div class="field">
+          <span class="fl"></span>
+          <button id="test-run" class="primary" type="button">Test Connection</button>
+        </div>
+      </div>
+      <p class="hint">Measures robot → proxy → bank login latency in milliseconds.
+        Green = within the slow threshold, red = slow, unreachable or timed out.</p>
+      <table id="test-results" hidden>
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
       <h2>Proxy list</h2>
       <table id="proxies-table">
         <thead>

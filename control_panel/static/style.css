@@ -328,6 +328,17 @@ button.btn-unban:hover { border-color: var(--text); }
   margin: 0 auto;
 }
 
+#test-results { margin-top: 10px; }
+#test-results th { text-align: left; }
+#test-results td.cell-ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+#test-results td.cell-bad {
+  color: var(--bad);
+  font-weight: 600;
+}
+
 #statement-body {
   background: #0a0e17;
   border: 1px solid var(--border);

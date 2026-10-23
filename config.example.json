@@ -12,6 +12,7 @@
   "page_load_wait": 4.0,
   "image_timeout": 15,
   "image_confidence": 0.8,
+  "proxy_test_slow_ms": 1000,
   "output_dir": "output",
   "live_capture": true,
   "live_interval_ms": 1000,

@@ -304,7 +304,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
 button.btn-ban {
   background: var(--ok);
   border-color: var(--ok);
-  color: #06230f;
+  color: #ffffff;
   font-weight: 600;
 }
 
@@ -313,11 +313,15 @@ button.btn-ban:hover { border-color: var(--text); }
 button.btn-unban {
   background: var(--bad);
   border-color: var(--bad);
-  color: #2b0707;
+  color: #ffffff;
   font-weight: 600;
 }
 
 button.btn-unban:hover { border-color: var(--text); }
+
+#live-panel .panel-head {
+  margin-bottom: 15px;
+}
 
 #live-panel .live-frame {
   max-width: 760px;

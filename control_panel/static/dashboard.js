@@ -223,8 +223,16 @@ async function viewStatement(label, bank) {
 }
 
 async function copyStatement() {
-  const text = $("#statement-body").textContent || "";
-  if (!text) {
+  const body = $("#statement-body");
+  // Select everything in the statement first, so the text is highlighted and
+  // the legacy copy command has a selection to work with.
+  const range = document.createRange();
+  range.selectNodeContents(body);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  const text = selection.toString() || body.textContent || "";
+  if (!text.trim()) {
     setStatus("Statement is empty - nothing to copy.", true);
     return;
   }
@@ -238,18 +246,10 @@ async function copyStatement() {
     copied = false;
   }
   if (!copied) {
-    // Plain-http panels are not a secure context, so fall back to a hidden
-    // textarea + execCommand("copy"), which works everywhere.
+    // Plain-http panels are not a secure context, so fall back to copying the
+    // current selection.
     try {
-      const area = document.createElement("textarea");
-      area.value = text;
-      area.setAttribute("readonly", "");
-      area.style.position = "fixed";
-      area.style.top = "-1000px";
-      document.body.appendChild(area);
-      area.select();
       copied = document.execCommand("copy");
-      area.remove();
     } catch (err) {
       copied = false;
     }
@@ -261,8 +261,8 @@ async function copyStatement() {
   }
   setStatus(
     copied
-      ? "Statement copied to the clipboard."
-      : "Copy failed - select the text and press Ctrl+C.",
+      ? "Statement selected and copied to the clipboard."
+      : "Copy failed - the statement is selected, press Ctrl+C.",
     !copied
   );
 }

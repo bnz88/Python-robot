@@ -155,13 +155,14 @@ class Permata:
 
         Sequence per attempt: solve the captcha, type it, press Enter, wait
         ``permata_captcha_check_wait`` (3 s) and look for ``captcha.JPG`` again.
-        Still visible means the login was rejected, so after
-        ``permata_captcha_retry_wait`` (2 s) Shift+Tab moves focus back to the
-        captcha field, the refreshed image is solved and Enter is pressed again.
-        At least three attempts are made (``permata_captcha_attempts`` can raise
-        it); when the captcha is gone the dashboard gate confirms the login.
-        Exhausting the attempts raises ``ScrapeAborted`` so main.py clears the
-        cooldown and leaves the account un-flagged for another pass.
+        Still visible means the login was rejected; the site refreshes the
+        captcha and puts focus back in its field by itself, so after
+        ``permata_captcha_retry_wait`` (2 s) the new image is solved and typed
+        straight away. At least three attempts are made
+        (``permata_captcha_attempts`` can raise it); when the captcha is gone the
+        dashboard gate confirms the login. Exhausting the attempts raises
+        ``ScrapeAborted`` so main.py clears the cooldown and leaves the account
+        un-flagged for another pass.
         """
         login_wait = self.config.get("permata_login_wait", 5.0)
         log("[permata] waiting {:.1f}s for the login form".format(login_wait))
@@ -172,7 +173,6 @@ class Permata:
         attempts = max(3, int(self.config.get("permata_captcha_attempts", 3)))
         check_wait = float(self.config.get("permata_captcha_check_wait", 3.0))
         retry_wait = float(self.config.get("permata_captcha_retry_wait", 2.0))
-        shift_tabs = int(self.config.get("permata_captcha_shift_tabs", 1))
         for attempt in range(1, attempts + 1):
             # Drop any sample from a previous (rejected) attempt so that, on
             # success, only the captcha actually submitted gets labeled.
@@ -204,11 +204,11 @@ class Permata:
                 )
                 if attempt < attempts:
                     log(
-                        "[permata] waiting {:.1f}s, then Shift+Tab back to the "
-                        "captcha field".format(retry_wait)
+                        "[permata] waiting {:.1f}s for the refreshed captcha".format(
+                            retry_wait
+                        )
                     )
                     time.sleep(retry_wait)
-                    self.driver.shift_tab(shift_tabs)
                 continue
 
             # The captcha disappeared, so the site accepted the credentials.

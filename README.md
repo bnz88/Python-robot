@@ -24,9 +24,9 @@ so no WebDriver fingerprint is exposed.
 > field image, type username/password, solve the case-sensitive 4-character image
 > captcha — Tesseract-first, training-free, see below). After Enter it waits
 > `permata_captcha_check_wait` (3 s) and looks for `captcha.JPG` again: still
-> visible means the captcha was wrong, so it waits `permata_captcha_retry_wait`
-> (2 s), presses Shift+Tab to put focus back on the captcha field, solves the
-> refreshed image and presses Enter again. At least 3 attempts run
+> visible means the captcha was wrong; the site refreshes the image and puts
+> focus back in its field by itself, so it waits `permata_captcha_retry_wait`
+> (2 s), solves the new image and presses Enter again. At least 3 attempts run
 > (`permata_captcha_attempts`); when the captcha is gone the dashboard gate
 > (`permata_user_icon`) confirms the login. If all attempts fail the account is
 > aborted and its cooldown is cleared, so it is not flagged as scraped and comes

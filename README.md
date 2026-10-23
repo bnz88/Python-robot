@@ -122,7 +122,8 @@ missing.
    - `image_confidence` — OpenCV match threshold for the submit/menu buttons.
    - `proxy_test_slow_ms` — latency above this (ms, default `1000`) is shown in
      red on the Proxies page's **Test Connection** table; anything faster, with
-     the proxy reaching the bank login page, is green.
+     the proxy reaching the bank login page, is green. It is also the cutoff for
+     the **Auto** proxy mode: proxies slower than this are never chosen.
    - `between_accounts_wait` — seconds to wait after closing Chrome before the next account starts.
    - `account_cooldown_seconds` — minimum seconds between scrapes of the same account (180 = 3 minutes).
    - `python_exe` — python to use for `/control/start` (defaults to the interpreter running `api.py`).
@@ -330,7 +331,21 @@ Passing `ip` and `port` makes every Chrome window the scraper opens use that HTT
 (`--proxy-server=http://ip:port`); no proxy username/password is used. If only one of
 `ip`/`port` is supplied it is ignored.
 
+`/control/start` also accepts a JSON body. The panel uses it for the proxy modes:
+`{"proxy": "auto", "proxies": [{"ip": "...", "port": 3128}, ...]}` writes the list to
+`output/auto_proxies.json` and starts `main.py --auto-proxy --proxy-file ...`. At the
+**start of the run** the scraper measures every configured bank login URL through
+every proxy once, assigns the fastest proxy per bank (`proxy_test_slow_ms` cutoff,
+logged as `[scraper] auto proxy for <bank>: using <ip:port> (<n> ms)`), and reuses
+those assignments until the operator stops it — a new Start measures again. Accounts
+whose bank has no proxy inside the threshold are skipped
+(`all proxies lagging ... please report to your administrator`) and never scraped
+without a proxy. `{"proxy": "manual", "proxy_ip": "...", "proxy_port": 3128}` uses
+that proxy without measuring. The Dashboard's Proxy select defaults to **Auto** and
+has no "none" entry.
+
 ```powershell
+curl -X POST -H "Content-Type: application/json" -d '{"proxy":"auto","proxies":[{"ip":"1.2.3.4","port":8080}]}' http://127.0.0.1:8000/control/start
 curl "http://127.0.0.1:8000/control/start?account=mybca&ip=1.2.3.4&port=8080"
 curl "http://127.0.0.1:8000/control/start?account=mybca"
 curl http://127.0.0.1:8000/control/status

@@ -19,42 +19,25 @@ import concurrent.futures
 import json
 import os
 import signal
-import socket
-import ssl
 import subprocess
 import sys
 import tempfile
 import threading
 import time
-import urllib.error
-import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
 from utils.output import log, sanitize_label
+from utils.proxy_latency import (
+    BANK_LOGIN_URL_KEYS,
+    measure_proxy_latency,
+    slow_threshold_ms,
+)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 KNOWN_BANKS = ("klikbca", "mybca", "cimb", "permata")
-
-# Bank login URLs used by the proxy connection test (config key per bank).
-BANK_LOGIN_URL_KEYS = (
-    ("mybca", "myBCA", "mybca_login_url"),
-    ("klikbca", "KlikBCA", "klikbca_login_url"),
-    ("cimb", "CIMB", "cimb_login_url"),
-    ("permata", "Permata", "permata_login_url"),
-)
-PROXY_TEST_TIMEOUT = 5.0
-
-
-def _classify_proxy_error(exc):
-    """Short label for a proxy/HTTP failure (timeout, tls, connection)."""
-    text = str(exc).lower()
-    if isinstance(exc, socket.timeout) or "timed out" in text:
-        return "timeout"
-    if isinstance(exc, ssl.SSLError) or "ssl" in text or "certificate" in text:
-        return "tls"
-    return "connection"
+AUTO_PROXY_FILE = os.path.join(BASE_DIR, "output", "auto_proxies.json")
 
 
 def test_connections(config, proxies):
@@ -73,10 +56,7 @@ def test_connections(config, proxies):
     if not banks:
         return {"error": "no bank login URLs configured"}
 
-    try:
-        threshold = int(config.get("proxy_test_slow_ms", 1000))
-    except (TypeError, ValueError):
-        threshold = 1000
+    threshold = slow_threshold_ms(config)
 
     results = [
         {
@@ -107,39 +87,6 @@ def test_connections(config, proxies):
         "banks": banks,
         "proxies": results,
     }
-
-
-def measure_proxy_latency(url, ip, port, timeout=PROXY_TEST_TIMEOUT):
-    """Round-trip latency (ms) from this machine to *url* through a proxy.
-
-    Returns ``{"ok": True, "latency_ms": int}`` or
-    ``{"ok": False, "error": "timeout"|"tls"|"connection"}``. An HTTP error
-    status still counts as success: the proxy reached the site, which is what
-    this test measures.
-    """
-    proxy_url = "http://{}:{}".format(ip, port)
-    handler = urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
-    opener = urllib.request.build_opener(handler)
-    request = urllib.request.Request(
-        url, method="GET", headers={"User-Agent": "Mozilla/5.0"}
-    )
-    started = time.perf_counter()
-    try:
-        response = opener.open(request, timeout=timeout)
-    except urllib.error.HTTPError as exc:
-        elapsed = int(round((time.perf_counter() - started) * 1000))
-        if exc.code == 407:
-            # The proxy itself refused: no credentials are supported.
-            return {"ok": False, "error": "auth required"}
-        return {"ok": True, "latency_ms": elapsed}
-    except Exception as exc:  # noqa: BLE001 - classified into a short label
-        return {"ok": False, "error": _classify_proxy_error(exc)}
-    try:
-        response.close()
-    except Exception:
-        pass
-    elapsed = int(round((time.perf_counter() - started) * 1000))
-    return {"ok": True, "latency_ms": elapsed}
 
 # Settings exposed to the panel, grouped into tabs. Each field is
 # {"key", "label", "type", "default", ...}. Nested keys use dots (e.g.
@@ -608,27 +555,7 @@ class StatementHandler(BaseHTTPRequestHandler):
                 self._set_enabled(label, enabled)
                 return True
         if path == "control/start":
-            extra = []
-            account = (query.get("account") or [None])[0]
-            if account in KNOWN_BANKS:
-                extra = ["--account", account]
-            proxy_ip = (query.get("ip") or [None])[0]
-            proxy_port = (query.get("port") or [None])[0]
-            if proxy_ip and proxy_port:
-                try:
-                    int(proxy_port)
-                except (TypeError, ValueError):
-                    self._send_json(
-                        400,
-                        {
-                            "error": "port must be an integer",
-                            "started": False,
-                            "running": False,
-                        },
-                    )
-                    return True
-                extra += ["--proxy-ip", proxy_ip, "--proxy-port", str(int(proxy_port))]
-            self._send_json(200, self.manager.start(extra))
+            self._start_scraper(query)
             return True
         if path == "control/stop":
             self._send_json(200, self.manager.stop())
@@ -715,6 +642,83 @@ class StatementHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+    # ------------------------------------------------------------------ start
+    def _start_scraper(self, query):
+        """Start ``main.py`` with the requested account and proxy mode.
+
+        JSON body preferred, query parameters kept for older panels:
+            {"account": "mybca", "proxy": "auto",
+             "proxies": [{"ip": "1.2.3.4", "port": 3128}, ...]}
+            {"account": "mybca", "proxy": "manual",
+             "proxy_ip": "1.2.3.4", "proxy_port": 3128}
+
+        In ``auto`` mode the list is written to ``output/auto_proxies.json`` and
+        ``main.py`` picks the fastest proxy per account; in ``manual`` mode (or
+        when only ``proxy_ip``/``proxy_port`` are given) a fixed proxy is used.
+        """
+        body = self._read_json_body()
+        if not isinstance(body, dict):
+            body = {}
+
+        account = body.get("account") or (query.get("account") or [None])[0]
+        extra = []
+        if account in KNOWN_BANKS:
+            extra = ["--account", account]
+
+        mode = str(body.get("proxy") or "").strip().lower()
+        if not mode and (body.get("proxy_ip") or query.get("ip")):
+            mode = "manual"
+
+        if mode == "auto":
+            proxies = []
+            for item in body.get("proxies") or []:
+                if not isinstance(item, dict):
+                    continue
+                ip = str(item.get("ip") or "").strip()
+                try:
+                    port = int(item.get("port"))
+                except (TypeError, ValueError):
+                    continue
+                if ip and 0 < port < 65536:
+                    proxies.append({"ip": ip, "port": port})
+            if not proxies:
+                self._send_json(
+                    400,
+                    {
+                        "error": "auto proxy needs a non-empty proxy list",
+                        "started": False,
+                        "running": self.manager.status().get("running", False),
+                    },
+                )
+                return
+            os.makedirs(os.path.dirname(AUTO_PROXY_FILE), exist_ok=True)
+            with open(AUTO_PROXY_FILE, "w", encoding="utf-8") as handle:
+                json.dump({"proxies": proxies}, handle)
+            extra += ["--auto-proxy", "--proxy-file", AUTO_PROXY_FILE]
+            log("[api] auto proxy mode with {} prox(ies)".format(len(proxies)))
+            self._send_json(200, self.manager.start(extra))
+            return
+
+        proxy_ip = str(
+            body.get("proxy_ip") or (query.get("ip") or [None])[0] or ""
+        ).strip()
+        proxy_port = body.get("proxy_port") or (query.get("port") or [None])[0]
+        if proxy_ip and proxy_port not in (None, ""):
+            try:
+                port = int(proxy_port)
+            except (TypeError, ValueError):
+                self._send_json(
+                    400,
+                    {
+                        "error": "port must be an integer",
+                        "started": False,
+                        "running": False,
+                    },
+                )
+                return
+            extra += ["--proxy-ip", proxy_ip, "--proxy-port", str(port)]
+        self._send_json(200, self.manager.start(extra))
 
     # ------------------------------------------------------------------ proxy test
     def _test_connections(self):

@@ -81,7 +81,10 @@ The Token must match `robot_token` in the robot's `config.json`.
 
 After clicking **Select**, you get:
 
-- **Proxy** — pick a proxy for this run (or *none* to use the robot's default).
+- **Proxy** — **Auto** (default) or one specific proxy; there is no "none". Auto
+  makes the robot test every proxy against the current account's bank login page
+  right before scraping it and use the fastest one under the slow threshold. A
+  specific proxy is used as-is, without testing.
 - **Account** — run *all* accounts, or only one bank (`mybca`, `klikbca`, `cimb`,
   `permata`).
 - **Start** / **Stop** buttons.
@@ -186,8 +189,17 @@ Manage a reusable list of proxies (IP, Port, Note).
 
 - **Add**: fill IP, Port and an optional Note, click **Add**.
 - **Remove**: delete a proxy from the list.
-- On the Dashboard (or when adding/editing a robot) pick a proxy from the **Proxy**
-  dropdown to use it for that run.
+- On the Dashboard pick **Auto** (fastest proxy per account, the default) or one
+  specific proxy to use for that run.
+- **Auto mode**: **once**, at the start of the run, the robot measures every bank
+  login URL through every proxy and assigns the fastest proxy to each bank; those
+  assignments are reused for the whole run and only recomputed when the operator
+  stops the scraper and presses **Start** again. The log shows one line per bank,
+  e.g. `[scraper] auto proxy for myBCA: using <ip:port> (<n> ms)`, and each
+  `scraping ...` line ends with `via <ip:port>`. If a bank has no proxy within the
+  threshold, its accounts are **not** scraped: the log says
+  `all proxies lagging ... please report to your administrator`, the cooldown is
+  cleared and the next account continues.
 - **Test Connection**: pick a **Robot**, then click **Test Connection**. The robot
   measures its own latency to every bank login page through every proxy and the
   result table shows milliseconds per proxy × bank. Green = the proxy reached the
@@ -255,7 +267,7 @@ Your own row is marked **(you)**.
 ## 10. Common tasks (quick recipes)
 
 **Start scraping a robot**
-Dashboard → **Select** the robot → choose Proxy/Account (optional) → **Start**.
+Dashboard → **Select** the robot → leave Proxy on **Auto** (or pick one proxy) and choose an Account if needed → **Start**.
 
 **Stop a robot**
 Dashboard → **Select** → **Stop** (this also closes the robot's Chrome).
@@ -318,6 +330,7 @@ Users page (admin).
 | Account never scraped | It is **banned**, or within its **cooldown**. Unban it or wait. |
 | Duplicate-label warning | The same Label exists on two robots. Remove or rename one. |
 | Statement file not created | Statement was unchanged, or the backoffice upload failed. Check `output\scraper.log`. |
+| `all proxies lagging ... please report to your administrator` | Auto could not find a proxy for that bank login page within `proxy_test_slow_ms`. Check the Proxies page **Test Connection**, fix/add a proxy, or raise the threshold in Settings → General. The account is skipped (not flagged scraped) and retried next pass. |
 | Settings won't load | The robot is offline — settings are read from the robot itself. |
 | Login fails after changes | Your account role/password changed; sign in again. |
 | Robot keeps stopping | The computer locked (screen saver / RDP sign-out). The machine must stay unlocked — see the Installation Manual §6 (unattended cloud VM setup). |

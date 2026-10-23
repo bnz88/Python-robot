@@ -148,11 +148,8 @@ async function selectRobot(id) {
   const r = state.robots.find((x) => String(x.id) === String(id));
   if (!r) return;
   $("#selected-name").textContent = r.name;
-  const proxySel = $("#proxy-select");
-  const proxyMatch = (state.proxies || []).find(
-    (p) => p.ip === r.default_proxy_ip && String(p.port) === String(r.default_proxy_port || "")
-  );
-  proxySel.value = proxyMatch ? String(proxyMatch.id) : "";
+  // Auto (fastest proxy per account) is the default start behaviour.
+  $("#proxy-select").value = "auto";
   $("#robot-controls").hidden = false;
   $("#accounts-title").textContent = "Accounts - " + r.name;
   $("#log-title").textContent = "Log - " + r.name;
@@ -163,13 +160,22 @@ async function selectRobot(id) {
 async function startRobot() {
   const id = state.selectedId;
   if (!id) return;
-  const proxyId = $("#proxy-select").value;
-  const proxy = (state.proxies || []).find((p) => String(p.id) === String(proxyId));
-  const body = {
-    proxy_ip: proxy ? proxy.ip : "",
-    proxy_port: proxy ? String(proxy.port) : "",
-    account: $("#account-select").value,
-  };
+  const proxyChoice = $("#proxy-select").value;
+  const body = { account: $("#account-select").value };
+  if (proxyChoice === "auto") {
+    body.proxy = "auto";
+    body.proxies = (state.proxies || []).map((p) => ({
+      ip: p.ip,
+      port: p.port,
+    }));
+  } else if (proxyChoice) {
+    const proxy = (state.proxies || []).find(
+      (p) => String(p.id) === String(proxyChoice)
+    );
+    body.proxy = "manual";
+    body.proxy_ip = proxy ? proxy.ip : "";
+    body.proxy_port = proxy ? String(proxy.port) : "";
+  }
   try {
     await post(`/api/robots/${id}/start`, body);
   } catch (err) {
@@ -347,15 +353,30 @@ function wireLiveFeed() {
 
 async function loadProxyOptions() {
   state.proxies = await get("/api/proxies");
-  const optionHtml =
-    '<option value="">proxy: none</option>' +
-    (state.proxies || [])
-      .map((p) => `<option value="${p.id}">${esc(String(p.ip) + ":" + String(p.port))}${p.note ? " (" + esc(p.note) + ")" : ""}</option>`)
-      .join("");
+  const proxyOptions = (state.proxies || [])
+    .map(
+      (p) =>
+        `<option value="${p.id}">${esc(String(p.ip) + ":" + String(p.port))}${p.note ? " (" + esc(p.note) + ")" : ""}</option>`
+    )
+    .join("");
   document.querySelectorAll(".proxy-select").forEach((sel) => {
     const keep = sel.value;
-    sel.innerHTML = optionHtml;
-    sel.value = keep && Array.from(sel.options).some((o) => o.value === keep) ? keep : "";
+    if (sel.id === "proxy-select") {
+      // Start-time choice: Auto (fastest proxy per account) is the default;
+      // there is intentionally no "none" option - the scraper always uses a
+      // proxy.
+      sel.innerHTML =
+        '<option value="auto">Auto (fastest proxy)</option>' + proxyOptions;
+      const present = Array.from(sel.options).some((o) => o.value === keep);
+      sel.value = keep && present ? keep : "auto";
+    } else {
+      // Add/Edit robot: a default proxy for that robot, or none.
+      sel.innerHTML = '<option value="">proxy: none</option>' + proxyOptions;
+      sel.value =
+        keep && Array.from(sel.options).some((o) => o.value === keep)
+          ? keep
+          : "";
+    }
   });
 }
 

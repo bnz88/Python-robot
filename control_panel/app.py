@@ -401,20 +401,35 @@ def api_robot_start(robot_id):
     account = (data.get("account") or "").strip()
     if account and _bank_hidden(account) and not _is_admin():
         return _json_error("bank '{}' is not available".format(account), 403)
-    proxy_ip = (data.get("proxy_ip") or robot.get("default_proxy_ip") or "").strip()
-    proxy_port = (
-        data.get("proxy_port") or robot.get("default_proxy_port") or ""
-    ).strip()
-    qs = []
+
+    mode = (data.get("proxy") or "").strip().lower()
+    payload = {}
     if account:
-        qs.append("account={}".format(quote(account, safe="")))
-    if proxy_ip and proxy_port:
-        qs.append("ip={}".format(quote(proxy_ip, safe="")))
-        qs.append("port={}".format(quote(proxy_port, safe="")))
-    path = "/control/start"
-    if qs:
-        path += "?" + "&".join(qs)
-    result = relay_json(robot, "POST", path)
+        payload["account"] = account
+
+    if mode == "auto":
+        proxies = db.list_proxies(DB_PATH)
+        if not proxies:
+            return _json_error(
+                "no proxies configured - Auto needs at least one proxy", 400
+            )
+        payload["proxy"] = "auto"
+        payload["proxies"] = [
+            {"ip": p["ip"], "port": p["port"]} for p in proxies
+        ]
+    else:
+        proxy_ip = str(
+            data.get("proxy_ip") or robot.get("default_proxy_ip") or ""
+        ).strip()
+        proxy_port = str(
+            data.get("proxy_port") or robot.get("default_proxy_port") or ""
+        ).strip()
+        if proxy_ip and proxy_port:
+            payload["proxy"] = "manual"
+            payload["proxy_ip"] = proxy_ip
+            payload["proxy_port"] = proxy_port
+
+    result = relay_json(robot, "POST", "/control/start", json=payload)
     if not result["ok"]:
         return jsonify(result), 502
     invalidate_cache()

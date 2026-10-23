@@ -30,10 +30,74 @@ from utils.output import (
     log,
     write_account_txt,
 )
+from utils.proxy_latency import (
+    BANK_LOGIN_URL_KEYS,
+    bank_login_url,
+    pick_proxies_for_banks,
+    slow_threshold_ms,
+)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 ACCOUNTS_PATH = os.path.join(BASE_DIR, "accounts.json")
+
+
+def load_auto_proxies(path):
+    """Proxy list written by the API for the Auto proxy mode, or ``None``.
+
+    ``None`` means "no auto mode" (manual proxy / robot default), so the
+    per-bank assignment at run start is skipped entirely.
+    """
+    if not path:
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError) as exc:
+        log("auto proxy list unreadable ({}); no proxy will be selected".format(exc))
+        return []
+    proxies = []
+    for item in (data or {}).get("proxies") or []:
+        if not isinstance(item, dict):
+            continue
+        ip = str(item.get("ip") or "").strip()
+        try:
+            port = int(item.get("port"))
+        except (TypeError, ValueError):
+            continue
+        if ip and 0 < port < 65536:
+            proxies.append({"ip": ip, "port": port})
+    log("auto proxy mode: {} prox(ies) loaded".format(len(proxies)))
+    return proxies
+
+
+def assign_proxies_per_bank(config, auto_proxies):
+    """Choose one proxy per bank login URL once, at the start of the run.
+
+    Auto mode probes every configured bank URL through every proxy a single
+    time; the resulting ``{bank: (ip, port, latency_ms)}`` is reused for the
+    whole run (until the operator stops the scraper and starts it again).
+    Banks with no proxy inside ``proxy_test_slow_ms`` are absent, so their
+    accounts are skipped later with an admin message.
+    """
+    assignments = pick_proxies_for_banks(config, auto_proxies)
+    threshold = slow_threshold_ms(config)
+    for bank, label, _config_key in BANK_LOGIN_URL_KEYS:
+        if not bank_login_url(config, bank):
+            continue
+        chosen = assignments.get(bank)
+        if chosen is None:
+            log(
+                "[scraper] no proxy within {} ms for {}; its accounts will be "
+                "skipped".format(threshold, label)
+            )
+        else:
+            log(
+                "[scraper] auto proxy for {}: using {}:{} ({} ms, threshold "
+                "{} ms)".format(label, chosen[0], chosen[1], chosen[2], threshold)
+            )
+    return assignments
+
 
 
 def load_config():
@@ -634,6 +698,14 @@ def main():
         "--proxy-ip", help="HTTP proxy IP/address for Chrome (no auth)"
     )
     parser.add_argument("--proxy-port", type=int, help="HTTP proxy port for Chrome")
+    parser.add_argument(
+        "--auto-proxy",
+        action="store_true",
+        help="pick the fastest proxy per account from --proxy-file",
+    )
+    parser.add_argument(
+        "--proxy-file", help="JSON file with the proxy list for --auto-proxy"
+    )
     args = parser.parse_args()
 
     config = load_config()
@@ -656,6 +728,15 @@ def main():
             "using proxy http://{}:{}".format(args.proxy_ip, args.proxy_port)
         )
 
+    auto_proxies = load_auto_proxies(args.proxy_file) if args.auto_proxy else None
+    # Auto mode: probe once at run start and keep the per-bank assignment until
+    # the operator stops the scraper (a new Start probes again).
+    auto_proxy_map = (
+        assign_proxies_per_bank(config, auto_proxies)
+        if auto_proxies is not None
+        else None
+    )
+
     if args.account:
         accounts = [a for a in accounts if a["bank"] == args.account]
         if not accounts:
@@ -677,6 +758,22 @@ def main():
         if not loop_forever:
             for account in reload_enabled_accounts(bank_filter):
                 if is_eligible(config, account):
+                    if auto_proxy_map is not None:
+                        picked = auto_proxy_map.get(str(account["bank"]).lower())
+                        if picked is None:
+                            log(
+                                "[scraper] all proxies lagging for {} ({}); "
+                                "skipping - please report to your "
+                                "administrator".format(
+                                    account["label"], account["bank"]
+                                )
+                            )
+                            clear_account_cooldown(config, account["label"])
+                            continue
+                        config["proxy_ip"], config["proxy_port"] = (
+                            picked[0],
+                            picked[1],
+                        )
                     prev_text = output_text(config, account["label"])
                     result = scrape_account(config, account)
                     process_scraped_account(config, account, result, prev_text)
@@ -747,10 +844,37 @@ def main():
             current = accounts[index]["label"]
             bank = accounts[index]["bank"]
             upcoming = next_eligible_label(config, accounts, index)
+
+            picked = None
+            if auto_proxy_map is not None:
+                picked = auto_proxy_map.get(str(bank).lower())
+                if picked is None:
+                    # Proxy is mandatory: skip this account instead of scraping
+                    # without one, keep it un-flagged and retry it next pass.
+                    log(
+                        "[scraper] all proxies lagging for {} ({}); skipping - "
+                        "please report to your administrator".format(current, bank)
+                    )
+                    clear_account_cooldown(config, current)
+                    skipped.add(current)
+                    scan_start = index + 1
+                    write_status(
+                        config, None, next_eligible_label(config, accounts, index)
+                    )
+                    log("")
+                    continue
+                config["proxy_ip"], config["proxy_port"] = picked[0], picked[1]
+
             write_status(config, current, upcoming)
             log("")
             log("[{}] {}".format(bank, current))
-            log("scraping {} (next: {})".format(current, upcoming))
+            log(
+                "scraping {} (next: {}){}".format(
+                    current,
+                    upcoming,
+                    " via {}:{}".format(picked[0], picked[1]) if picked else "",
+                )
+            )
             prev_text = output_text(config, current)
             result = scrape_account(config, accounts[index])
             outcome = process_scraped_account(config, accounts[index], result, prev_text)

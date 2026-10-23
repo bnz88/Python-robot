@@ -212,13 +212,19 @@ class Permata:
                 continue
 
             # The captcha disappeared, so the site accepted the credentials.
+            # The user icon on the dashboard is the confirmation that the
+            # login succeeded; scraping then continues as usual.
+            log("[permata] captcha not found; checking the user icon")
             if self._logged_in():
-                log("[permata] logged in on attempt {}".format(attempt))
+                log(
+                    "[permata] login succeeded on attempt {} (captcha gone, "
+                    "user icon found)".format(attempt)
+                )
                 self._confirm_captcha_sample()
                 self.driver.handle_challenge()
                 return
             log(
-                "[permata] captcha cleared but the dashboard gate was not found; "
+                "[permata] captcha gone but the user icon was not found; "
                 "stopping this account"
             )
             raise ScrapeAborted(
@@ -275,7 +281,13 @@ class Permata:
             log("[permata] labeled captcha sample {}".format(row[0]))
 
     def _logged_in(self):
-        """True when the logged-in gate image (user icon) is on screen."""
+        """True when the dashboard user icon is on screen (login succeeded).
+
+        The icon's middle letters vary between logins, so if the normal
+        threshold misses it a second pass runs at a lower confidence for a
+        shorter time - a page that really is logged in must not be discarded
+        right after the captcha disappeared.
+        """
         image = self.config.get("permata_user_icon", "user_icon.JPG")
         center, score = self.driver.locate_image(
             image,
@@ -283,6 +295,19 @@ class Permata:
             confidence=self._icon_confidence(),
             scales=self._scales(),
         )
+        if center is None:
+            relaxed = round(max(0.5, float(self._icon_confidence()) - 0.15), 2)
+            center, score = self.driver.locate_image(
+                image,
+                timeout=min(5.0, float(self._image_timeout())),
+                confidence=relaxed,
+                scales=self._scales(),
+            )
+            if center is not None:
+                log(
+                    "[permata] login gate found at relaxed confidence {:.2f} "
+                    "(score {:.2f})".format(relaxed, score)
+                )
         log(
             "[permata] login gate (user icon) {} (score {:.2f})".format(
                 "found" if center is not None else "not found", score

@@ -27,11 +27,12 @@ so no WebDriver fingerprint is exposed.
 > visible means the captcha was wrong; the site refreshes the image and puts
 > focus back in its field by itself, so it waits `permata_captcha_retry_wait`
 > (2 s), solves the new image and presses Enter again. At least 3 attempts run
-> (`permata_captcha_attempts`). When the captcha is gone **and** the dashboard
-> user icon (`permata_user_icon`) is on screen, the login has succeeded and
-> scraping continues; if the icon never appears the account is stopped and its
-> cooldown cleared. If all attempts fail the account is aborted the same way, so
-> it is not flagged as scraped and comes back on the next pass. On success it opens the statement URL, finds the
+> (`permata_captcha_attempts`). The dashboard user icon (`permata_user_icon`) is
+> the authoritative success signal and is checked first, so a captcha-like shape
+> elsewhere on the dashboard cannot mark a good login as rejected. If the icon
+> never appears the account is stopped and its cooldown cleared; if all attempts
+> fail it is aborted the same way, so it is not flagged as scraped and comes back
+> on the next pass. On success it opens the statement URL, finds the
 > `ind_flag.JPG` flag —
 > the page ignores the mouse wheel, so it scrolls one screen at a time with
 > `PageDown` (falling back to clicking the page once and re-trying `PageDown`,

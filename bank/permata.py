@@ -197,6 +197,15 @@ class Permata:
                 )
             )
             time.sleep(check_wait)
+
+            # The dashboard user icon is the authoritative success signal: the
+            # login page never shows it, while a captcha-like image can still
+            # match somewhere on the dashboard. Probe it first with a short
+            # timeout so a rejected attempt stays fast.
+            if self._logged_in(timeout=2.0):
+                self._finish_login(attempt)
+                return
+
             if self._captcha_visible():
                 log(
                     "[permata] attempt {}/{}: captcha still shown - login "
@@ -211,38 +220,41 @@ class Permata:
                     time.sleep(retry_wait)
                 continue
 
-            # The captcha disappeared, so the site accepted the credentials.
-            # The user icon on the dashboard is the confirmation that the
-            # login succeeded; scraping then continues as usual.
-            log("[permata] captcha not found; checking the user icon")
-            if self._logged_in():
-                log(
-                    "[permata] login succeeded on attempt {} (captcha gone, "
-                    "user icon found)".format(attempt)
-                )
-                self._confirm_captcha_sample()
-                self.driver.handle_challenge()
-                return
+            # Neither image is visible: the page is most likely still moving to
+            # the dashboard, so give the icon the full timeout before giving up.
             log(
-                "[permata] captcha gone but the user icon was not found; "
-                "stopping this account"
+                "[permata] neither the user icon nor the captcha is visible yet; "
+                "waiting for the dashboard"
             )
+            if self._logged_in():
+                self._finish_login(attempt)
+                return
             raise ScrapeAborted(
-                "permata login accepted but the dashboard gate was not found"
+                "permata login could not be confirmed (no user icon, no captcha)"
             )
 
         raise ScrapeAborted(
             "permata login failed after {} captcha attempt(s)".format(attempts)
         )
 
+    def _finish_login(self, attempt):
+        """Log the confirmed login, label the captcha sample and continue."""
+        log("[permata] login succeeded on attempt {} (user icon found)".format(attempt))
+        self._confirm_captcha_sample()
+        self.driver.handle_challenge()
+
     def _captcha_visible(self):
-        """True while the captcha image is still on screen (login not accepted)."""
+        """True while the captcha image is still on screen (login not accepted).
+
+        Matched at the native scale only (the login page is not scaled), so a
+        captcha-like shape elsewhere on the dashboard cannot produce a false
+        positive.
+        """
         image = self.config.get("permata_captcha_image", "captcha.JPG")
         center, _score = self.driver.locate_image(
             image,
             timeout=1.0,
             confidence=self.config.get("permata_captcha_confidence", 0.5),
-            scales=self._scales(),
         )
         return center is not None
 
@@ -280,26 +292,27 @@ class Permata:
         if row:
             log("[permata] labeled captcha sample {}".format(row[0]))
 
-    def _logged_in(self):
+    def _logged_in(self, timeout=None):
         """True when the dashboard user icon is on screen (login succeeded).
 
-        The icon's middle letters vary between logins, so if the normal
-        threshold misses it a second pass runs at a lower confidence for a
-        shorter time - a page that really is logged in must not be discarded
-        right after the captcha disappeared.
+        *timeout* shortens the probe (used right after Enter so a rejected
+        attempt stays fast); the relaxed second pass runs only for the full
+        check. The icon's middle letters vary between logins, so the relaxed
+        pass exists to keep a real dashboard from being discarded.
         """
         image = self.config.get("permata_user_icon", "user_icon.JPG")
+        wait = float(self._image_timeout()) if timeout is None else float(timeout)
         center, score = self.driver.locate_image(
             image,
-            timeout=self._image_timeout(),
+            timeout=wait,
             confidence=self._icon_confidence(),
             scales=self._scales(),
         )
-        if center is None:
+        if center is None and timeout is None:
             relaxed = round(max(0.5, float(self._icon_confidence()) - 0.15), 2)
             center, score = self.driver.locate_image(
                 image,
-                timeout=min(5.0, float(self._image_timeout())),
+                timeout=min(5.0, wait),
                 confidence=relaxed,
                 scales=self._scales(),
             )

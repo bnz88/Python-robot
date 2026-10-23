@@ -1,6 +1,8 @@
 "use strict";
 
 const IS_ADMIN = window.PANEL_ROLE === "admin";
+const LIVE_REFRESH_MS =
+  Number((document.querySelector("main") || {}).dataset?.refreshMs) || 1000;
 
 const state = {
   robots: [],
@@ -21,6 +23,7 @@ async function loadRobots() {
     $("#robot-controls").hidden = true;
   }
   if (state.selectedId) await refreshSelected();
+  refreshLive();
 }
 
 function renderRobots() {
@@ -117,8 +120,8 @@ function renderAccounts(accounts) {
         <button data-act="view" data-label="${esc(a.label)}" data-bank="${esc(a.bank || "")}">View</button>
         ${
           a.enabled
-            ? `<button data-act="ban" data-label="${esc(a.label)}">Ban</button>`
-            : `<button data-act="unban" data-label="${esc(a.label)}">Unban</button>`
+            ? `<button class="btn-ban" data-act="ban" data-label="${esc(a.label)}">Ban</button>`
+            : `<button class="btn-unban" data-act="unban" data-label="${esc(a.label)}">Unban</button>`
         }
         <button data-act="remove" data-label="${esc(a.label)}">Remove</button>
       </td>`;
@@ -217,6 +220,129 @@ async function viewStatement(label, bank) {
   $("#statement-body").textContent =
     data && data.text != null ? data.text : "(no output yet)";
   $("#statement-dialog").showModal();
+}
+
+async function copyStatement() {
+  const text = $("#statement-body").textContent || "";
+  if (!text) {
+    setStatus("Statement is empty - nothing to copy.", true);
+    return;
+  }
+  let copied = false;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    }
+  } catch (err) {
+    copied = false;
+  }
+  if (!copied) {
+    // Plain-http panels are not a secure context, so fall back to a hidden
+    // textarea + execCommand("copy"), which works everywhere.
+    try {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.top = "-1000px";
+      document.body.appendChild(area);
+      area.select();
+      copied = document.execCommand("copy");
+      area.remove();
+    } catch (err) {
+      copied = false;
+    }
+  }
+  const button = $("#statement-copy");
+  if (copied) {
+    button.classList.add("copied");
+    window.setTimeout(() => button.classList.remove("copied"), 1200);
+  }
+  setStatus(
+    copied
+      ? "Statement copied to the clipboard."
+      : "Copy failed - select the text and press Ctrl+C.",
+    !copied
+  );
+}
+
+function selectedRobot() {
+  return (
+    state.robots.find((x) => String(x.id) === String(state.selectedId)) || null
+  );
+}
+
+function applyLiveControls(container, robot) {
+  const start = container.querySelector('button[data-act="start"]');
+  const stop = container.querySelector('button[data-act="stop"]');
+  const blocked = !robot.online || !!robot.auth_error;
+  if (start) start.disabled = blocked || !!robot.running;
+  if (stop) stop.disabled = blocked || !robot.running;
+  const status = container.querySelector(".log-card-status");
+  if (status) {
+    const text = blocked
+      ? robot.auth_error
+        ? "auth failed"
+        : "offline"
+      : robot.running
+        ? "RUNNING"
+        : "stopped";
+    const cls = blocked ? "bad" : robot.running ? "ok" : "bad";
+    status.className = "log-card-status " + cls;
+    status.textContent = text;
+  }
+}
+
+function refreshLive() {
+  const panel = $("#live-panel");
+  const robot = selectedRobot();
+  const modal = $("#live-modal");
+  if (!robot) {
+    panel.hidden = true;
+    if (modal.open) modal.close();
+    return;
+  }
+  panel.hidden = false;
+  $("#live-title").textContent = "Live feed - " + robot.name;
+  $("#live-img").src = `/api/robots/${robot.id}/live?t=${Date.now()}`;
+  applyLiveControls(panel, robot);
+  if (modal.open) {
+    $("#live-modal-title").textContent = `${robot.name} (${robot.host}:${robot.port})`;
+    $("#live-modal-img").src = `/api/robots/${robot.id}/live?t=${Date.now()}`;
+    applyLiveControls(modal, robot);
+  }
+}
+
+function wireLiveFeed() {
+  const img = $("#live-img");
+  const placeholder = document.querySelector("#live-panel .live-placeholder");
+  img.addEventListener("load", () => {
+    img.style.visibility = "visible";
+    placeholder.style.display = "none";
+  });
+  img.addEventListener("error", () => {
+    img.style.visibility = "hidden";
+    placeholder.style.display = "";
+  });
+
+  $("#live-start").addEventListener("click", startRobot);
+  $("#live-stop").addEventListener("click", stopRobot);
+  $("#live-zoom").addEventListener("click", () => {
+    refreshLive();
+    $("#live-modal").showModal();
+  });
+  $("#live-modal-close").addEventListener("click", () => $("#live-modal").close());
+  $("#live-modal").addEventListener("click", (event) => {
+    if (event.target.closest('button[data-act="start"]')) {
+      startRobot();
+    } else if (event.target.closest('button[data-act="stop"]')) {
+      stopRobot();
+    } else if (event.target === $("#live-modal")) {
+      $("#live-modal").close();
+    }
+  });
+  window.setInterval(refreshLive, LIVE_REFRESH_MS);
 }
 
 async function loadProxyOptions() {
@@ -351,6 +477,8 @@ function init() {
     if (state.autoLog) loadLogIfAuto();
   });
   $("#statement-close").addEventListener("click", () => $("#statement-dialog").close());
+  $("#statement-copy").addEventListener("click", copyStatement);
+  wireLiveFeed();
   $("#edit-cancel").addEventListener("click", () => $("#edit-dialog").close());
   $("#edit-form").addEventListener("submit", submitEdit);
   $("#add-robot-form").addEventListener("submit", submitAdd);

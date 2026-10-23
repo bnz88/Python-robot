@@ -277,6 +277,52 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
 
 .statement-head { display: flex; align-items: center; justify-content: space-between; }
 #statement-close { font-size: 20px; border: none; background: none; }
+.statement-actions { display: inline-flex; align-items: center; gap: 8px; }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  margin: 0;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.icon-btn:hover { color: var(--text); border-color: var(--accent); }
+
+.icon-btn.copied {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+button.btn-ban {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #06230f;
+  font-weight: 600;
+}
+
+button.btn-ban:hover { border-color: var(--text); }
+
+button.btn-unban {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #2b0707;
+  font-weight: 600;
+}
+
+button.btn-unban:hover { border-color: var(--text); }
+
+#live-panel .live-frame {
+  max-width: 760px;
+  margin: 0 auto;
+}
 
 #statement-body {
   background: #0a0e17;

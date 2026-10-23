@@ -350,7 +350,8 @@ Panel configuration lives in `control_panel/config.json` (`panel_host`,
 `panel_port`, `secret_key`, `db_path`, and the seeded `admin_username` /
 `admin_password`). Robots are added from the dashboard UI; each robot's token is
 stored in `control_panel/panel.db` (never account credentials). The panel has
-three pages: **Dashboard** (robot status + start/stop + per-robot logs),
+three pages: **Dashboard** (robot status + start/stop + per-robot logs + a live
+feed of the selected robot with start/stop and an enlarge button),
 **Accounts** (add/remove bank accounts across robots — each label is globally
 unique and can belong to only one robot), **Live Logs** (one auto-refreshing
 log window per robot, headed by which account is being scraped now and which is

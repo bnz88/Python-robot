@@ -10,7 +10,7 @@
 {% set active = 'dashboard' %}
   {% include '_header.html' %}
 
-  <main>
+  <main data-refresh-ms="{{ refresh_ms }}">
     <p id="status" class="status"></p>
     <section class="panel">
       <div class="panel-head">
@@ -105,6 +105,24 @@
       </div>
       <pre id="log-pane"></pre>
     </section>
+
+    <section class="panel" id="live-panel" hidden>
+      <div class="panel-head">
+        <h2 id="live-title">Live feed</h2>
+        <span class="log-card-actions">
+          <button id="live-start" data-act="start" class="primary" type="button" title="Start scraping">Start</button>
+          <button id="live-stop" data-act="stop" type="button" title="Stop scraping">Stop</button>
+          <button id="live-zoom" class="live-zoom" type="button" title="Enlarge live view" aria-label="Enlarge live view">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 9V4h5M20 15v5h-5M15 4h5v5M9 20H4v-5"/></svg>
+          </button>
+        </span>
+        <button class="min-toggle" type="button" title="Minimize">−</button>
+      </div>
+      <div class="live-frame" id="live-frame">
+        <img id="live-img" class="live-card-img" alt="live view" style="visibility:hidden">
+        <span class="live-placeholder">no footage</span>
+      </div>
+    </section>
   </main>
 
   <dialog id="edit-dialog">
@@ -130,9 +148,32 @@
   <dialog id="statement-dialog">
     <div class="statement-head">
       <h3>Statement</h3>
-      <button id="statement-close">&times;</button>
+      <div class="statement-actions">
+        <button id="statement-copy" class="icon-btn" type="button"
+                title="Copy statement" aria-label="Copy statement">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"
+                  d="M9 9h10v10H9zM5 15V5h10"/>
+          </svg>
+        </button>
+        <button id="statement-close">&times;</button>
+      </div>
     </div>
     <pre id="statement-body"></pre>
+  </dialog>
+
+  <dialog id="live-modal" class="live-modal">
+    <div class="live-modal-head">
+      <span id="live-modal-title" class="live-modal-title"></span>
+      <span class="log-card-actions">
+        <button type="button" class="primary" data-act="start" title="Start scraping">Start</button>
+        <button type="button" data-act="stop" title="Stop scraping">Stop</button>
+      </span>
+      <span class="log-card-status"></span>
+      <button type="button" id="live-modal-close" class="live-modal-close"
+              aria-label="Close enlarged view" title="Close">&times;</button>
+    </div>
+    <img id="live-modal-img" alt="enlarged live view">
   </dialog>
 
   <script src="{{ url_for('static', filename='common.js') }}"></script>

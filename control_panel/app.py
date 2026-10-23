@@ -255,10 +255,21 @@ def logout():
     return redirect(url_for("login"))
 
 
+def _live_refresh_ms():
+    """Panel live-view refresh interval in milliseconds (min 200)."""
+    try:
+        value = int(float(config.get("live_refresh_ms", 1000)))
+    except (TypeError, ValueError):
+        value = 1000
+    return max(200, value)
+
+
 @app.route("/")
 @auth.login_required
 def dashboard():
-    return render_template("dashboard.html", banks=_visible_banks())
+    return render_template(
+        "dashboard.html", banks=_visible_banks(), refresh_ms=_live_refresh_ms()
+    )
 
 
 @app.route("/accounts")
@@ -294,11 +305,7 @@ def users_page():
 @app.route("/live")
 @auth.login_required
 def live_page():
-    try:
-        refresh_ms = int(float(config.get("live_refresh_ms", 1000)))
-    except (TypeError, ValueError):
-        refresh_ms = 1000
-    return render_template("live.html", refresh_ms=max(200, refresh_ms))
+    return render_template("live.html", refresh_ms=_live_refresh_ms())
 
 
 # ------------------------------------------------------------------ robot list

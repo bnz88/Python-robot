@@ -977,6 +977,7 @@ td.cell-empty {
   margin: 0;
   padding: 14px 16px;
   min-height: 220px;
+  max-height: 420px;
   flex: 1 1 auto;
   overflow: auto;
   border: 1px solid var(--border-subtle);

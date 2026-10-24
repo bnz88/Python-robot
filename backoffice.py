@@ -47,6 +47,7 @@ Requires Playwright with a Chromium browser installed:
 import json
 
 from utils.output import log
+from utils.stop import check as check_stop
 
 DEFAULT_LOGIN_URL = "https://bo.sistem88.com/bo/login.action"
 DEFAULT_PARSE_URL = "https://bo.sistem88.com/bo/bankStatementParse!view"
@@ -101,6 +102,7 @@ def _select_shortname(page, shortname):
 
 
 def _login(page, bo):
+    check_stop()
     page.goto(bo.get("login_url", DEFAULT_LOGIN_URL), wait_until="domcontentloaded")
     page.wait_for_timeout(1500)
     # The username field is focused on arrival; type, Tab to password, Enter.
@@ -109,9 +111,11 @@ def _login(page, bo):
     page.keyboard.type(bo["password"], delay=40)
     page.keyboard.press("Enter")
     page.wait_for_timeout(4000)
+    check_stop()
 
 
 def _fill(st_page, account, report_text):
+    check_stop()
     st_page.wait_for_selector(REPORT_TEXT_SELECTOR, timeout=20000)
 
     shortname = (account.get("bank_shortname") or "").strip()
@@ -273,6 +277,7 @@ def upload_statement(config, account, report_text):
             _login(page, bo)
             page.goto(bo.get("parse_url", DEFAULT_PARSE_URL), wait_until="domcontentloaded")
             _fill(page, account, report_text)
+            check_stop()
             success = _submit(page, bo)
             if not keep_open:
                 # Brief pause after the backoffice flow so the final state
@@ -282,26 +287,29 @@ def upload_statement(config, account, report_text):
             error = exc
             log("[backoffice] error during backoffice flow: {}".format(exc))
         finally:
-            if keep_open:
-                # Leave the browser open until the user closes the window (or
-                # stops the scraper), even when the flow errored.
-                log(
-                    "[backoffice] dry run: browser left open for debugging "
-                    "(success={}); close the browser window to continue".format(
-                        success
-                    )
-                )
-                while True:
-                    try:
-                        if not browser.is_connected():
-                            break
-                        page.wait_for_timeout(1000)
-                    except Exception:
-                        break
             try:
-                browser.close()
-            except Exception:
-                pass
+                if keep_open:
+                    # Leave the browser open until the user closes the window
+                    # (or stops the scraper), even when the flow errored.
+                    log(
+                        "[backoffice] dry run: browser left open for debugging "
+                        "(success={}); close the browser window to continue".format(
+                            success
+                        )
+                    )
+                    while True:
+                        check_stop()
+                        try:
+                            if not browser.is_connected():
+                                break
+                            page.wait_for_timeout(1000)
+                        except Exception:
+                            break
+            finally:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
 
     if error is not None:
         raise error

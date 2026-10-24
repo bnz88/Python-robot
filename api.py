@@ -16,8 +16,10 @@ Host/port come from config.json (``api_host``, ``api_port``).
 """
 
 import concurrent.futures
+import hmac
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -27,6 +29,8 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
+from utils.housekeeping import cleanup_stale_profiles
+from utils.instance_lock import acquire_instance_lock
 from utils.output import log, sanitize_label
 from utils.proxy_latency import (
     BANK_LOGIN_URL_KEYS,
@@ -38,6 +42,7 @@ from utils.stop import clear_stop, request_stop
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 KNOWN_BANKS = ("klikbca", "mybca", "cimb", "permata")
+LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 AUTO_PROXY_FILE = os.path.join(BASE_DIR, "output", "auto_proxies.json")
 
 
@@ -107,7 +112,8 @@ CONFIG_SCHEMA = [
             {"key": "image_timeout", "label": "Image click timeout (s)", "type": "int", "default": 15},
             {"key": "image_confidence", "label": "Image match confidence", "type": "float", "default": 0.85, "min": 0, "max": 1},
             {"key": "proxy_test_slow_ms", "label": "Proxy slow threshold (ms)", "type": "int", "default": 1000, "min": 1, "help": "Latency above this marks a proxy result as slow (red) in the Proxies page connection test."},
-            {"key": "stop_timeout", "label": "Stop/kill timeout (s)", "type": "int", "default": 20},
+            {"key": "stop_grace_seconds", "label": "Stop grace before force-kill (s)", "type": "float", "default": 3.0, "min": 1, "max": 10, "help": "Wait this long for a clean exit after Stop, then force-kill the scraper and Chrome."},
+            {"key": "stop_timeout", "label": "Legacy stop timeout (s, ignored)", "type": "int", "default": 20, "min": 1, "help": "Deprecated: kept only so older config files load. Use Stop grace before force-kill instead."},
             {"key": "loop_forever", "label": "Loop forever", "type": "bool", "default": True},
             {"key": "window_width", "label": "Window width (px)", "type": "int", "default": 1280},
             {"key": "window_height", "label": "Window height (px)", "type": "int", "default": 900},
@@ -366,14 +372,93 @@ def kill_tree(pid):
             pass
 
 
+def process_alive(pid):
+    """True when *pid* is a live process (Windows-safe, no psutil needed)."""
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        SYNCHRONIZE = 0x00100000
+        STILL_ACTIVE = 259
+        handle = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, False, pid
+        )
+        if not handle:
+            return False
+        try:
+            code = wintypes.DWORD()
+            if not ctypes.windll.kernel32.GetExitCodeProcess(
+                handle, ctypes.byref(code)
+            ):
+                return True
+            return code.value == STILL_ACTIVE
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def process_create_time(pid):
+    """Windows process creation time (epoch seconds), or None if unknown."""
+    if os.name != "nt":
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    handle = ctypes.windll.kernel32.OpenProcess(
+        PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid)
+    )
+    if not handle:
+        return None
+    try:
+        created = wintypes.FILETIME()
+        exited = wintypes.FILETIME()
+        kernel = wintypes.FILETIME()
+        user = wintypes.FILETIME()
+        if not ctypes.windll.kernel32.GetProcessTimes(
+            handle,
+            ctypes.byref(created),
+            ctypes.byref(exited),
+            ctypes.byref(kernel),
+            ctypes.byref(user),
+        ):
+            return None
+        ticks = (created.dwHighDateTime << 32) | created.dwLowDateTime
+        return ticks / 1e7 - 11644473600.0
+    finally:
+        ctypes.windll.kernel32.CloseHandle(handle)
+
+
 class ProcessManager:
-    """Start/stop `python main.py` as a single managed child process."""
+    """Start/stop `python main.py` as a single managed child process.
+
+    Stop is two-phase: the operator call returns immediately, a background
+    thread waits ``stop_grace_seconds`` for a clean exit, then force-kills the
+    process tree. A pid file lets a restarted API adopt a scraper that outlived
+    it, so Stop still works after an API restart.
+    """
 
     def __init__(self, base_dir, config):
         self.base_dir = base_dir
         self.config = config
         self.lock = threading.Lock()
         self.process = None
+        self.pid = None
+        self.stopping = False
+        self.stop_thread = None
+        self.stop_requested_at = None
+        self._adopt_existing()
 
     def _script_path(self):
         script = self.config.get("scraper_script", "main.py")
@@ -384,32 +469,157 @@ class ProcessManager:
     def _python_exe(self):
         return self.config.get("python_exe") or sys.executable
 
+    # ------------------------------------------------------------- pid file
+    def _pid_file(self):
+        return os.path.join(output_dir_from(self.config), "scraper.pid")
+
+    def _read_pid_file(self):
+        path = self._pid_file()
+        if not os.path.isfile(path):
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, ValueError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _write_pid_file(self, pid):
+        path = self._pid_file()
+        directory = os.path.dirname(path)
+        try:
+            os.makedirs(directory, exist_ok=True)
+            fd, tmp_path = tempfile.mkstemp(
+                dir=directory, prefix=".scraper-", suffix=".pid.tmp"
+            )
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "pid": int(pid),
+                        "started_at": time.time(),
+                        "script": self._script_path(),
+                    },
+                    handle,
+                )
+            os.replace(tmp_path, path)
+        except OSError as exc:
+            log("[api] could not write pid file {}: {}".format(path, exc))
+
+    def _remove_pid_file(self):
+        try:
+            os.remove(self._pid_file())
+        except OSError:
+            pass
+
+    def _adopt_existing(self):
+        """Pick up a scraper started before this API process (API restart)."""
+        info = self._read_pid_file()
+        if not info:
+            return
+        pid = info.get("pid")
+        started_at = info.get("started_at") or 0
+        try:
+            started_at = float(started_at)
+        except (TypeError, ValueError):
+            started_at = 0.0
+        too_old = started_at and (time.time() - started_at) > 7 * 86400
+        try:
+            pid_int = int(pid or 0)
+        except (TypeError, ValueError):
+            pid_int = 0
+        if (
+            not too_old
+            and pid_int != os.getpid()
+            and process_alive(pid_int)
+        ):
+            created = process_create_time(pid_int)
+            if (
+                started_at
+                and created is not None
+                and abs(created - started_at) > 180
+            ):
+                # The PID was reused by an unrelated process; do not adopt it.
+                log(
+                    "[api] ignoring stale pid file (pid {} is not our scraper)".format(
+                        pid_int
+                    )
+                )
+                self._remove_pid_file()
+                return
+            self.pid = pid_int
+            log("[api] adopted running scraper pid {}".format(self.pid))
+        else:
+            self._remove_pid_file()
+
+    # --------------------------------------------------------------- state
+    def _grace_seconds(self):
+        try:
+            value = float(self.config.get("stop_grace_seconds", 3.0))
+        except (TypeError, ValueError):
+            value = 3.0
+        return min(10.0, max(1.0, value))
+
+    def _alive_locked(self):
+        """Liveness check; reaps a Popen child that already exited."""
+        if self.process is not None:
+            code = self.process.poll()
+            if code is None:
+                return True
+            self.process = None
+            return False
+        return bool(self.pid and process_alive(self.pid))
+
+    def _pid_alive(self, pid):
+        """Liveness for the stopper; reaps our own child so a zombie is dead."""
+        if self.process is not None and self.process.pid == pid:
+            return self.process.poll() is None
+        return process_alive(pid)
+
+    def _refresh_locked(self):
+        alive = self._alive_locked()
+        if not alive and not self.stopping:
+            self.pid = None
+            self._remove_pid_file()
+        return alive
+
     def status(self):
         with self.lock:
-            if self.process is None:
-                base = {"running": False, "pid": None, "returncode": None}
-            else:
-                code = self.process.poll()
-                base = {
-                    "running": code is None,
-                    "pid": self.process.pid,
-                    "returncode": code,
-                }
+            alive = self._refresh_locked()
+            base = {
+                "running": bool(alive),
+                "pid": self.pid if alive else None,
+                "returncode": None,
+                "stopping": bool(self.stopping),
+            }
         info = read_status(self.config)
         base["current_account"] = info.get("current")
         base["next_account"] = info.get("next")
         base["status_updated"] = info.get("updated")
         return base
 
+    # --------------------------------------------------------------- start
     def start(self, extra_args=None):
         with self.lock:
-            if self.process is not None and self.process.poll() is None:
+            if self.stopping:
                 return {
                     "started": False,
                     "running": True,
-                    "pid": self.process.pid,
+                    "stopping": True,
+                    "pid": self.pid,
+                    "message": "still stopping",
+                }
+            if self._refresh_locked():
+                return {
+                    "started": False,
+                    "running": True,
+                    "stopping": False,
+                    "pid": self.pid,
                     "message": "already running",
                 }
+
+            self.process = None
+            self.pid = None
+            self._remove_pid_file()
 
             cmd = [self._python_exe(), self._script_path()]
             if extra_args:
@@ -435,17 +645,21 @@ class ProcessManager:
             except OSError:
                 pass
 
-            # Never let a leftover stop flag abort this fresh run.
+            # Never let a leftover stop flag abort this fresh run. A stop
+            # requested after this point is honoured by the scraper.
             clear_stop(self.config, self.base_dir)
 
             # Open a visible console window on the desktop so the scraper's
-            # verbose logs (from utils.output.log) are shown as it runs. The
-            # own process group lets /control/stop deliver Ctrl+Break.
+            # verbose logs (from utils.output.log) are shown as it runs.
             creationflags = 0
             if os.name == "nt":
-                creationflags = (
-                    subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_NEW_PROCESS_GROUP
-                )
+                if self.config.get("scraper_console", True):
+                    creationflags = (
+                        subprocess.CREATE_NEW_CONSOLE
+                        | subprocess.CREATE_NEW_PROCESS_GROUP
+                    )
+                else:
+                    creationflags = subprocess.CREATE_NO_WINDOW
 
             try:
                 self.process = subprocess.Popen(
@@ -458,58 +672,152 @@ class ProcessManager:
             except Exception as exc:
                 return {"started": False, "running": False, "message": str(exc)}
 
+            self.pid = self.process.pid
+            self._write_pid_file(self.pid)
             log("[api] started scraper pid {}: {}".format(self.process.pid, cmd))
             return {
                 "started": True,
                 "running": True,
+                "stopping": False,
                 "pid": self.process.pid,
                 "message": "started",
             }
 
+    # ---------------------------------------------------------------- stop
     def stop(self, timeout=None):
-        timeout = timeout if timeout is not None else self.config.get("stop_timeout", 20)
+        """Request a stop and return immediately (non-blocking).
+
+        ``timeout`` is accepted for backwards compatibility and ignored; the
+        grace period comes from ``stop_grace_seconds``.
+        """
         with self.lock:
-            if self.process is None or self.process.poll() is not None:
-                self.process = None
+            alive = self._refresh_locked()
+            if not alive:
+                if self.stopping:
+                    # The stopper thread is still finishing cleanup; do not
+                    # let a second Stop (or Start) race the profile sweep.
+                    return {
+                        "stopped": False,
+                        "stopping": True,
+                        "running": False,
+                        "pid": None,
+                        "message": "stopping",
+                    }
+                self.stopping = False
+                self.stop_thread = None
                 clear_stop(self.config, self.base_dir)
-                return {"stopped": False, "running": False, "message": "not running"}
-            proc = self.process
+                self._remove_pid_file()
+                return {
+                    "stopped": False,
+                    "stopping": False,
+                    "running": False,
+                    "message": "not running",
+                }
+            if self.stopping:
+                return {
+                    "stopped": False,
+                    "stopping": True,
+                    "running": True,
+                    "pid": self.pid,
+                    "message": "stopping",
+                }
 
-        # Ask the scraper to stop through the flag file it polls. It then exits
-        # through its normal cleanup path, so driver.close() terminates Chrome
-        # and removes the temporary profile. Fall back to a hard kill only when
-        # the scraper does not exit within the stop timeout.
-        try:
-            request_stop(self.config, self.base_dir)
-        except OSError as exc:
-            log("[api] could not write stop flag: {}".format(exc))
-
-        graceful = False
-        log(
-            "[api] stop requested for scraper pid {}; waiting up to {}s for a "
-            "clean exit".format(proc.pid, timeout)
-        )
-        try:
-            proc.wait(timeout=timeout)
-            graceful = True
-        except Exception:
-            log(
-                "[api] scraper pid {} did not stop in {}s; killing process "
-                "tree".format(proc.pid, timeout)
-            )
-            kill_tree(proc.pid)
             try:
-                proc.wait(timeout=timeout)
-            except Exception:
-                pass
-        finally:
-            clear_stop(self.config, self.base_dir)
+                request_stop(self.config, self.base_dir)
+            except OSError as exc:
+                log("[api] could not write stop flag: {}".format(exc))
+
+            self.stopping = True
+            self.stop_requested_at = time.time()
+            pid = self.pid
+            thread = threading.Thread(
+                target=self._finish_stop,
+                args=(pid,),
+                daemon=True,
+                name="scraper-stop",
+            )
+            self.stop_thread = thread
+            thread.start()
+            log(
+                "[api] stop requested for scraper pid {}; allowing {:.1f}s for a "
+                "clean exit".format(pid, self._grace_seconds())
+            )
+            return {
+                "stopped": False,
+                "stopping": True,
+                "running": True,
+                "pid": pid,
+                "message": "stopping",
+            }
+
+    def _finish_stop(self, pid):
+        """Wait for a clean exit, then force-kill; runs on a daemon thread."""
+        grace = self._grace_seconds()
+        deadline = time.time() + grace
+        while time.time() < deadline:
+            if not self._pid_alive(pid):
+                break
+            time.sleep(0.1)
+
+        forced = False
+        alive = self._pid_alive(pid)
+        if alive:
+            forced = True
+            log(
+                "[api] scraper pid {} did not stop in {:.1f}s; killing process "
+                "tree".format(pid, grace)
+            )
+            kill_tree(pid)
+            kill_deadline = time.time() + 3.0
+            while time.time() < kill_deadline and self._pid_alive(pid):
+                time.sleep(0.1)
+            alive = self._pid_alive(pid)
+
+        # Clean up abandoned Chrome profiles before a new run can start (start()
+        # refuses while ``stopping`` is true), so the fresh profile is not swept.
+        if forced and not alive:
+            cleanup_stale_profiles(max_age_seconds=0)
 
         with self.lock:
-            self.process = None
+            if self.process is not None and self.process.pid == pid and not alive:
+                self.process = None
+            if not alive:
+                self.pid = None
+                self.stopping = False
+                self.stop_thread = None
+                self._remove_pid_file()
+                clear_stop(self.config, self.base_dir)
+            else:
+                # Keep the flag and stopping state so a retry can try again.
+                log(
+                    "[api] scraper pid {} survived the force-kill; stop flag "
+                    "kept".format(pid)
+                )
 
-        log("[api] scraper stopped ({})".format("cleanly" if graceful else "forced"))
-        return {"stopped": True, "running": False, "message": "stopped"}
+        if not alive:
+            log("[api] scraper stopped ({})".format("forced" if forced else "cleanly"))
+
+    def stop_now(self):
+        """Synchronous stop used when the API itself is shutting down."""
+        self.stop()
+        with self.lock:
+            thread = self.stop_thread
+        if thread is not None:
+            thread.join(timeout=self._grace_seconds() + 5.0)
+        with self.lock:
+            alive = self._alive_locked()
+            pid = self.pid
+        if alive and pid:
+            kill_tree(pid)
+            time.sleep(0.2)
+            with self.lock:
+                if not process_alive(pid):
+                    self.process = None
+                    self.pid = None
+                    self.stopping = False
+                    self.stop_thread = None
+                    self._remove_pid_file()
+                    clear_stop(self.config, self.base_dir)
 
 
 class StatementHandler(BaseHTTPRequestHandler):
@@ -543,10 +851,11 @@ class StatementHandler(BaseHTTPRequestHandler):
         self._send_json(404, None)
 
     def _authorized(self):
-        token = self.config.get("robot_token", "")
+        token = str(self.config.get("robot_token") or "")
         if not token:
             return True
-        return self.headers.get("X-Robot-Token", "") == token
+        provided = self.headers.get("X-Robot-Token", "") or ""
+        return hmac.compare_digest(provided, token)
 
     def _handle_control(self, path, query):
         if path == "control/status":
@@ -582,7 +891,9 @@ class StatementHandler(BaseHTTPRequestHandler):
             self._start_scraper(query)
             return True
         if path == "control/stop":
-            self._send_json(200, self.manager.stop())
+            outcome = self.manager.stop()
+            status = 202 if outcome.get("stopping") else 200
+            self._send_json(status, outcome)
             return True
         if path == "control/test_connections":
             if self.command == "POST":
@@ -851,6 +1162,18 @@ class StatementHandler(BaseHTTPRequestHandler):
             if not value:
                 self._send_json(400, {"error": "missing field: {}".format(key)})
                 return
+        if not LABEL_RE.match(label):
+            self._send_json(
+                400,
+                {
+                    "error": (
+                        "label may only contain letters, numbers, dots, dashes "
+                        "and underscores (max 64 characters, must start with a "
+                        "letter or number)"
+                    )
+                },
+            )
+            return
 
         accounts_path = os.path.join(BASE_DIR, "accounts.json")
         accounts = []
@@ -865,7 +1188,9 @@ class StatementHandler(BaseHTTPRequestHandler):
                 return
         if not isinstance(accounts, list):
             accounts = []
-        if any(a.get("label") == label for a in accounts):
+        if any(
+            str(a.get("label") or "").casefold() == label.casefold() for a in accounts
+        ):
             self._send_json(409, {"error": "label already exists on this robot"})
             return
 
@@ -977,6 +1302,9 @@ class StatementHandler(BaseHTTPRequestHandler):
         entry = next((a for a in accounts if a.get("label") == label), None)
         if entry is None:
             self._send_json(404, {"error": "no such label"})
+            return
+        if "bank" in body and body.get("bank") not in KNOWN_BANKS:
+            self._send_json(400, {"error": "unknown bank"})
             return
         for key in ("bank", "username", "password", "unique_id", "bank_shortname"):
             if key in body:
@@ -1206,39 +1534,13 @@ class StatementHandler(BaseHTTPRequestHandler):
             pass
 
 
-def acquire_instance_lock(path):
-    """Take an exclusive OS lock so only one robot API runs per repo.
-
-    Windows lets a second server bind the same port when SO_REUSEADDR is set,
-    which left stale ``api.py`` processes answering (or failing to answer)
-    requests on port 8000. Returns an open handle that holds the lock, or None
-    when another instance already owns it.
-    """
-    try:
-        directory = os.path.dirname(path)
-        if directory:
-            os.makedirs(directory, exist_ok=True)
-        handle = open(path, "a+")
-    except OSError:
-        return None
-    try:
-        if os.name == "nt":
-            import msvcrt
-
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-        else:
-            import fcntl
-
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        handle.close()
-        return None
-    return handle
-
-
 def main():
     config = load_config()
+    if not str(config.get("robot_token") or "").strip():
+        log(
+            "[api] WARNING: robot_token is empty - every route except /health "
+            "accepts unauthenticated requests"
+        )
     host = config.get("api_host", "127.0.0.1")
     port = int(config.get("api_port", 8000))
     lock = acquire_instance_lock(os.path.join(BASE_DIR, "output", "api.lock"))
@@ -1262,7 +1564,7 @@ def main():
         server.serve_forever()
     except KeyboardInterrupt:
         log("shutting down")
-        StatementHandler.manager.stop()
+        StatementHandler.manager.stop_now()
     finally:
         server.server_close()
         try:

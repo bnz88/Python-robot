@@ -13,7 +13,8 @@ const state = {
 };
 
 async function loadRobots() {
-  state.robots = await get("/api/robots");
+  const robots = await get("/api/robots");
+  state.robots = Array.isArray(robots) ? robots : [];
   const stillSelected = state.robots.some(
     (r) => String(r.id) === String(state.selectedId)
   );
@@ -56,9 +57,11 @@ function renderRobotPicker() {
           ? "offline"
           : r.auth_error
             ? "auth failed"
-            : r.running
-              ? "running"
-              : "ready";
+            : r.stopping
+              ? "stopping"
+              : r.running
+                ? "running"
+                : "ready";
         return `<option value="${r.id}">${esc(r.name)} - ${esc(label)}</option>`;
       })
       .join("");
@@ -100,7 +103,9 @@ function renderKpis() {
   setMetric(
     "kpi-running-foot",
     active
-      ? `${esc(active.name)}${active.current_account ? " &middot; " + esc(active.current_account) : ""}`
+      ? active.stopping
+        ? `${esc(active.name)} &middot; stopping`
+        : `${esc(active.name)}${active.current_account ? " &middot; " + esc(active.current_account) : ""}`
       : "No scraper running"
   );
 
@@ -144,6 +149,9 @@ function updateDeckState() {
   } else if (robot.auth_error) {
     badge.className = "badge badge-warn";
     badge.textContent = "auth failed";
+  } else if (robot.stopping) {
+    badge.className = "badge badge-warn";
+    badge.textContent = "stopping";
   } else if (robot.running) {
     badge.className = "badge badge-ok";
     badge.textContent = "running";
@@ -156,11 +164,11 @@ function updateDeckState() {
   const start = $("#start-btn");
   const stop = $("#stop-btn");
   if (start) {
-    start.disabled = blocked || !!robot.running;
+    start.disabled = blocked || !!robot.running || !!robot.stopping;
     start.title = blocked ? "Robot is offline or auth failed" : "";
   }
   if (stop) {
-    stop.disabled = blocked || !robot.running;
+    stop.disabled = blocked || !robot.running || !!robot.stopping;
     stop.title = blocked ? "Robot is offline or auth failed" : "";
   }
 }
@@ -344,7 +352,10 @@ async function startRobot() {
     body.proxy_port = proxy ? String(proxy.port) : "";
   }
   try {
-    await post(`/api/robots/${id}/start`, body);
+    const res = await post(`/api/robots/${id}/start`, body);
+    if (res.error) setStatus(res.error, true);
+    else if (res.started) setStatus("Scraper starting...");
+    else if (res.message) setStatus(res.message);
   } catch (err) {
     setStatus(err.message, true);
   }
@@ -354,8 +365,15 @@ async function startRobot() {
 async function stopRobot() {
   const id = state.selectedId;
   if (!id) return;
+  const robot = selectedRobot();
   try {
-    await post(`/api/robots/${id}/stop`);
+    const res = await post(`/api/robots/${id}/stop`);
+    if (res.error) setStatus(res.error, true);
+    else if (res.stopping) {
+      setStatus(`Stopping ${robot ? robot.name : "robot"}...`);
+      if (robot) robot.stopping = true;
+      updateDeckState();
+    }
   } catch (err) {
     setStatus(err.message, true);
   }
@@ -708,7 +726,16 @@ function init() {
   });
   loadProxyOptions();
   loadRobots();
-  setInterval(loadRobots, 2500);
+  const pollRobots = async () => {
+    try {
+      await loadRobots();
+    } catch (err) {
+      setStatus(err.message, true);
+    }
+    const fast = state.robots.some((r) => r.stopping);
+    window.setTimeout(pollRobots, fast ? 800 : 2500);
+  };
+  window.setTimeout(pollRobots, 2500);
 }
 
 init();

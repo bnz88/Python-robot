@@ -59,9 +59,13 @@ def login_required(view):
     def wrapped(*args, **kwargs):
         user_id = session.get("user_id")
         if not user_id:
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "authentication required"}), 401
             return redirect(url_for("login"))
         if _user_loader is not None and _user_loader(user_id) is None:
             session.clear()
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "authentication required"}), 401
             return redirect(url_for("login"))
         return view(*args, **kwargs)
 

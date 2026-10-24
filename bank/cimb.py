@@ -20,10 +20,9 @@ reference images may have been captured at a different display scale; the scale
 factors come from ``cimb_image_scales``.
 """
 
-import time
-
 from bank.base import ChromeDriver, ScrapeAborted
 from utils.output import log, write_account_txt
+from utils.stop import sleep as stop_sleep
 
 
 class CIMB:
@@ -66,7 +65,7 @@ class CIMB:
                     logged_in_wait
                 )
             )
-            time.sleep(logged_in_wait)
+            stop_sleep(logged_in_wait)
 
         log("[cimb] opening the statement page: {}".format(statement_url))
         self.driver.goto_url(statement_url)
@@ -76,7 +75,7 @@ class CIMB:
                 statement_wait
             )
         )
-        time.sleep(statement_wait)
+        stop_sleep(statement_wait)
 
         text = self.driver.capture_statement_text(account["label"])
         if capture_mode:
@@ -150,13 +149,13 @@ class CIMB:
             "[cimb] waiting {:.1f}s for the login form, then clicking the "
             "user id input".format(login_wait)
         )
-        time.sleep(login_wait)
+        stop_sleep(login_wait)
         self._click_image(user_id_image, "user id input box")
         self.driver.type_text(username)
         self.driver.tab(1)
         self.driver.type_text(password)
         submit_wait = self.config.get("cimb_submit_wait", 1.0)
-        time.sleep(submit_wait)
+        stop_sleep(submit_wait)
         self.driver.press_enter()
         self.driver.handle_challenge()
 
@@ -167,7 +166,7 @@ class CIMB:
         )
         logout_wait = self.config.get("cimb_logout_wait", 5.0)
         log("[cimb] waiting {:.1f}s before logging out".format(logout_wait))
-        time.sleep(logout_wait)
+        stop_sleep(logout_wait)
         scales = self.config.get(
             "cimb_image_scales", [1.0, 0.8, 0.67, 0.5, 1.25, 1.5]
         )
@@ -190,4 +189,4 @@ class CIMB:
             )
         )
         self.driver.click_at(center)
-        time.sleep(self.config.get("delay_long", 2.5))
+        stop_sleep(self.config.get("delay_long", 2.5))

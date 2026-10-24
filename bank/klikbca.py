@@ -18,10 +18,10 @@ not flag it as scraped, and moves on to the next account.
 """
 
 import os
-import time
 
 from bank.base import ChromeDriver, ScrapeAborted
 from utils.output import log, write_account_txt
+from utils.stop import sleep as stop_sleep
 
 
 class KlikBCA:
@@ -95,14 +95,14 @@ class KlikBCA:
     def _login(self, username, password):
         login_wait = self.config.get("klikbca_login_wait", 5.0)
         log("[klikbca] waiting {:.1f}s for the login form".format(login_wait))
-        time.sleep(login_wait)
+        stop_sleep(login_wait)
         self.driver.type_text(username)
         self.driver.tab(1)
         self.driver.type_text(password)
         self.driver.press_enter()
         dashboard_wait = self.config.get("klikbca_dashboard_wait", 7.0)
         log("[klikbca] waiting {:.1f}s to land on the bank dashboard".format(dashboard_wait))
-        time.sleep(dashboard_wait)
+        stop_sleep(dashboard_wait)
         self.driver.handle_challenge()
 
     def _open_statement(self, label):
@@ -111,7 +111,7 @@ class KlikBCA:
         log("[klikbca] opening the main menu (tab x{}, enter)".format(menu_tabs))
         self.driver.tab(menu_tabs)
         self.driver.press_enter()
-        time.sleep(menu_wait)
+        stop_sleep(menu_wait)
 
         stmt_tabs = self.config.get("klikbca_stmt_tabs", 3)
         stmt_wait = self.config.get("klikbca_stmt_wait", 3.0)
@@ -122,7 +122,7 @@ class KlikBCA:
         )
         self.driver.tab(stmt_tabs)
         self.driver.press_enter()
-        time.sleep(stmt_wait)
+        stop_sleep(stmt_wait)
 
         stmt_buttons = self.config.get(
             "klikbca_statement_buttons",
@@ -171,7 +171,7 @@ class KlikBCA:
                 stmt_gen_wait
             )
         )
-        time.sleep(stmt_gen_wait)
+        stop_sleep(stmt_gen_wait)
 
     def _logout(self):
         logout_button = self.config.get(
@@ -190,4 +190,4 @@ class KlikBCA:
             log("[klikbca] logout button not found on screen")
             return
         log("[klikbca] waiting {:.1f}s for logout to complete".format(logout_wait))
-        time.sleep(logout_wait)
+        stop_sleep(logout_wait)

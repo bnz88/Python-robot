@@ -25,6 +25,7 @@ from bank.klikbca import KlikBCA
 from bank.mybca import MyBCA
 from bank.permata import Permata
 from utils.housekeeping import cleanup_stale_profiles
+from utils.instance_lock import acquire_instance_lock
 from utils.output import (
     account_output_path,
     configure_log_file,
@@ -42,6 +43,7 @@ from utils.stop import check as check_stop
 from utils.stop import clear_stop
 from utils.stop import sleep as stop_sleep
 from utils.stop import start_watching
+from utils.stop import stop_flag_path
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
@@ -714,11 +716,25 @@ def main():
     )
     args = parser.parse_args()
 
-    config = load_config()
+    instance_lock = acquire_instance_lock(
+        os.path.join(BASE_DIR, "output", "scraper.lock")
+    )
+    if instance_lock is None:
+        log("another scraper already owns output/scraper.lock - exiting")
+        raise SystemExit(1)
 
-    # Drop a stop flag left by a previous run, then watch for the panel's stop
-    # request so a stop always exits through the normal cleanup path.
-    clear_stop(config, BASE_DIR)
+    config = load_config()
+    started_at = time.time()
+
+    # Drop a stop flag left by a previous run, but honour one written around
+    # this start (the panel may request a stop while the process boots).
+    flag_path = stop_flag_path(config, BASE_DIR)
+    try:
+        flag_mtime = os.path.getmtime(flag_path)
+    except OSError:
+        flag_mtime = None
+    if flag_mtime is not None and flag_mtime < started_at - 5.0:
+        clear_stop(config, BASE_DIR)
     start_watching(config, BASE_DIR)
 
     log_file = config.get("log_file")

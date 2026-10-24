@@ -18,7 +18,7 @@ import os
 import threading
 
 FLAG_NAME = "stop.request"
-POLL_INTERVAL = 0.5
+POLL_INTERVAL = 0.2
 
 _event = threading.Event()
 _flag_path = None

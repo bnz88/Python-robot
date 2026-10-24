@@ -3,6 +3,7 @@ config.json
 output/
 __pycache__/
 *.pyc
+.pytest_cache/
 control_panel/panel.db
 assets/
 dataset/permata/misses/

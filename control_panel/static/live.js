@@ -17,6 +17,7 @@ function liveUrl(id) {
 function statusFor(robot) {
   if (!robot.online) return { text: "offline", cls: "bad" };
   if (robot.auth_error) return { text: "auth failed", cls: "warn" };
+  if (robot.stopping) return { text: "STOPPING", cls: "warn" };
   return { text: robot.running ? "RUNNING" : "stopped", cls: "ok" };
 }
 
@@ -29,15 +30,22 @@ function applyRobotState(container, robot) {
   }
   const startBtn = container.querySelector('button[data-act="start"]');
   const stopBtn = container.querySelector('button[data-act="stop"]');
-  if (startBtn) startBtn.disabled = !robot.online || !!robot.running || !!robot.auth_error;
-  if (stopBtn) stopBtn.disabled = !robot.online || !robot.running;
+  if (startBtn) {
+    startBtn.disabled =
+      !robot.online || !!robot.running || !!robot.stopping || !!robot.auth_error;
+  }
+  if (stopBtn) {
+    stopBtn.disabled = !robot.online || !robot.running || !!robot.stopping;
+  }
 }
 
 async function runRobotAction(id, button) {
   if (!button || button.disabled) return;
   button.disabled = true;
   try {
-    await robotAction(id, button.dataset.act);
+    const res = await robotAction(id, button.dataset.act);
+    if (res && res.error) setStatus(res.error, true);
+    else if (res && res.stopping) setStatus("Stopping scraper...");
   } catch (err) {
     setStatus(err.message, true);
   }

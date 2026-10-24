@@ -198,7 +198,7 @@ class ChromeDriver:
             log("[{}] closing existing Chrome failed: {}".format(self.bank_name, exc))
             return running
         # Give Windows a moment to destroy the windows and release the desktop.
-        time.sleep(1.0)
+        stop_sleep(1.0)
         remaining = self._count_processes("chrome.exe")
         if remaining:
             log(
@@ -302,7 +302,7 @@ class ChromeDriver:
                 except Exception:
                     continue
             if maximized:
-                time.sleep(self.config["delay_short"])
+                stop_sleep(self.config["delay_short"])
                 return True
         hint = self.config.get("window_title_hint", "Google Chrome")
         try:
@@ -313,7 +313,7 @@ class ChromeDriver:
                     if win.isMinimized:
                         win.restore()
                     win.maximize()
-                    time.sleep(self.config["delay_short"])
+                    stop_sleep(self.config["delay_short"])
                     return True
                 except Exception:
                     continue
@@ -489,7 +489,7 @@ class ChromeDriver:
                 user32.ShowWindow(hwnd, 9)  # SW_RESTORE
             user32.BringWindowToTop(hwnd)
             user32.SetForegroundWindow(hwnd)
-            time.sleep(self.config["delay_short"])
+            stop_sleep(self.config["delay_short"])
             if user32.GetForegroundWindow() == hwnd:
                 return True
             # Windows can refuse SetForegroundWindow for a background process;
@@ -501,7 +501,7 @@ class ChromeDriver:
                 x = (rect.left + rect.right) // 2
                 y = max(1, rect.top + 8)
                 pyautogui.click(x, y)
-                time.sleep(self.config["delay_short"])
+                stop_sleep(self.config["delay_short"])
                 return user32.GetForegroundWindow() == hwnd
         except Exception:
             pass
@@ -521,7 +521,7 @@ class ChromeDriver:
                     if win.isMinimized:
                         win.restore()
                     win.activate()
-                    time.sleep(self.config["delay_short"])
+                    stop_sleep(self.config["delay_short"])
                     return True
                 except Exception:
                     continue
@@ -575,15 +575,15 @@ class ChromeDriver:
         """Select and delete the text of the focused input (Ctrl+A, Delete)."""
         self.ensure_foreground()
         pyautogui.hotkey("ctrl", "a")
-        time.sleep(self.config["delay_short"] * 0.5)
+        stop_sleep(self.config["delay_short"] * 0.5)
         pyautogui.press("delete")
-        time.sleep(self.config["delay_short"] * 0.5)
+        stop_sleep(self.config["delay_short"] * 0.5)
 
     def goto_url(self, url):
         """Focus the address bar and navigate to *url*."""
         self.ensure_foreground()
         pyautogui.hotkey("ctrl", "l")
-        time.sleep(self.config["delay_short"])
+        stop_sleep(self.config["delay_short"])
         pyautogui.write(url, interval=0.02)
         pyautogui.press("enter")
         stop_sleep(self.config["page_load_wait"])
@@ -598,12 +598,12 @@ class ChromeDriver:
     def press_enter(self):
         self.ensure_foreground()
         pyautogui.press("enter")
-        time.sleep(self.config["delay_short"])
+        stop_sleep(self.config["delay_short"])
 
     def type_text(self, text):
         self.ensure_foreground()
         pyautogui.write(text, interval=0.05)
-        time.sleep(self.config["delay_short"])
+        stop_sleep(self.config["delay_short"])
 
     # ---------------------------------------------------------------- login
     def keyboard_login(self, username, password):
@@ -614,18 +614,18 @@ class ChromeDriver:
         click_x = self.config.get("form_click_x", w // 2)
         click_y = self.config.get("form_click_y", int(h * 0.22))
         pyautogui.click(click_x, click_y)
-        time.sleep(self.config["delay_short"])
+        stop_sleep(self.config["delay_short"])
         self.tab(self.config.get("tabs_to_username", 1))
         self.type_text(username)
         self.tab(1)
         self.type_text(password)
-        time.sleep(self.config["delay_short"])
+        stop_sleep(self.config["delay_short"])
 
     def submit(self, button_image="login_button.png"):
         """Submit via Enter, falling back to an image-matched button click."""
         self.ensure_foreground()
         pyautogui.press("enter")
-        time.sleep(self.config["delay_long"])
+        stop_sleep(self.config["delay_long"])
         asset = self.asset_path(button_image)
         if os.path.exists(asset) and self._image_present(asset, tries=1):
             log(
@@ -634,7 +634,7 @@ class ChromeDriver:
                 )
             )
             self.click_image(button_image, timeout=self.config["delay_long"])
-            time.sleep(self.config["delay_long"])
+            stop_sleep(self.config["delay_long"])
         self.handle_challenge()
 
     def handle_challenge(self):
@@ -650,7 +650,7 @@ class ChromeDriver:
                 "Complete the challenge manually in the browser, "
                 "then press Enter to continue..."
             )
-            time.sleep(self.config["delay_short"])
+            stop_sleep(self.config["delay_short"])
             return True
         return False
 
@@ -767,7 +767,7 @@ class ChromeDriver:
                 return hit[0], hit[1]
             if time.time() >= deadline:
                 return None, best
-            time.sleep(0.5)
+            stop_sleep(0.5)
 
     def locate_image_by_scrolling(
         self,
@@ -872,7 +872,7 @@ class ChromeDriver:
         before = self._screen_signature()
 
         def moved():
-            time.sleep(self.config["delay_short"])
+            stop_sleep(self.config["delay_short"])
             return self._screen_signature() != before
 
         def press_page():
@@ -947,7 +947,7 @@ class ChromeDriver:
         try:
             self.ensure_foreground()
             pyautogui.hotkey("ctrl", "home")
-            time.sleep(self.config["delay_short"])
+            stop_sleep(self.config["delay_short"])
             return True
         except Exception:
             return False
@@ -956,7 +956,7 @@ class ChromeDriver:
         """Focus our Chrome window and click an absolute screen coordinate."""
         self.ensure_foreground()
         pyautogui.click(int(point[0]), int(point[1]))
-        time.sleep(self.config["delay_short"])
+        stop_sleep(self.config["delay_short"])
         return True
 
     def locate_image_candidates(
@@ -1054,7 +1054,7 @@ class ChromeDriver:
                 ]
             if time.time() >= deadline:
                 return []
-            time.sleep(0.5)
+            stop_sleep(0.5)
 
     def _image_present(self, path, tries=1, confidence=None):
         confidence = confidence or self.config["image_confidence"]
@@ -1064,7 +1064,7 @@ class ChromeDriver:
                     return True
             except Exception:
                 pass
-            time.sleep(0.3)
+            stop_sleep(0.3)
         return False
 
     def image_present(self, name, timeout=None, confidence=None):
@@ -1087,14 +1087,14 @@ class ChromeDriver:
                     return True
             except Exception:
                 pass
-            time.sleep(0.5)
+            stop_sleep(0.5)
         return False
 
     def click_point(self, x, y):
         """Focus the window and click an absolute screen coordinate."""
         self.ensure_foreground()
         pyautogui.click(int(x), int(y))
-        time.sleep(self.config["delay_short"])
+        stop_sleep(self.config["delay_short"])
         return True
 
     def click_image(self, name, timeout=None, confidence=None):
@@ -1131,11 +1131,11 @@ class ChromeDriver:
         w = self.config["window_width"]
         h = self.config["window_height"]
         pyautogui.click(w // 2, h // 2)
-        time.sleep(self.config["delay_short"])
+        stop_sleep(self.config["delay_short"])
         pyautogui.hotkey("ctrl", "a")
-        time.sleep(self.config["delay_short"])
+        stop_sleep(self.config["delay_short"])
         pyautogui.hotkey("ctrl", "c")
-        time.sleep(self.config["delay_short"])
+        stop_sleep(self.config["delay_short"])
 
     def capture_statement_text(self, label):
         """Select-all/copy the page and return the captured statement text.

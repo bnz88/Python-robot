@@ -27,12 +27,12 @@ The changed statement is then uploaded to the backoffice like the other banks.
 """
 
 import os
-import time
 
 from bank.base import ChromeDriver, ScrapeAborted
 from utils import captcha_dataset
 from utils.captcha import read_captcha, read_captcha_near, read_captcha_permata
 from utils.output import log
+from utils.stop import sleep as stop_sleep
 
 DEFAULT_LOGIN_URL = "https://www.permatanet.com/pnet/"
 DEFAULT_STATEMENT_URL = "https://www.permatanet.com/pnet/saving-detail/IDR#mutation"
@@ -62,7 +62,7 @@ class Permata:
 
         after_login_wait = self.config.get("permata_after_login_wait", 3.0)
         log("[permata] waiting {:.1f}s after login".format(after_login_wait))
-        time.sleep(after_login_wait)
+        stop_sleep(after_login_wait)
 
         statement_url = self.config.get(
             "permata_statement_url", DEFAULT_STATEMENT_URL
@@ -78,13 +78,13 @@ class Permata:
                 statement_wait
             )
         )
-        time.sleep(statement_wait)
+        stop_sleep(statement_wait)
 
         text = self.driver.capture_statement_text(account["label"])
 
         capture_wait = self.config.get("permata_capture_wait", 3.0)
         log("[permata] waiting {:.1f}s before logout".format(capture_wait))
-        time.sleep(capture_wait)
+        stop_sleep(capture_wait)
 
         try:
             self._logout()
@@ -118,7 +118,7 @@ class Permata:
         )
         close_wait = self.config.get("permata_close_wait", 5.0)
         log("[permata] waiting {:.1f}s before closing the modal".format(close_wait))
-        time.sleep(close_wait)
+        stop_sleep(close_wait)
         self.driver.click_at(center)
 
     def _focus_username(self):
@@ -166,7 +166,7 @@ class Permata:
         """
         login_wait = self.config.get("permata_login_wait", 5.0)
         log("[permata] waiting {:.1f}s for the login form".format(login_wait))
-        time.sleep(login_wait)
+        stop_sleep(login_wait)
 
         self._fill_credentials(username, password)
 
@@ -196,7 +196,7 @@ class Permata:
                     check_wait
                 )
             )
-            time.sleep(check_wait)
+            stop_sleep(check_wait)
 
             # The dashboard user icon is the authoritative success signal: the
             # login page never shows it, while a captcha-like image can still
@@ -217,7 +217,7 @@ class Permata:
                             retry_wait
                         )
                     )
-                    time.sleep(retry_wait)
+                    stop_sleep(retry_wait)
                 continue
 
             # Neither image is visible: the page is most likely still moving to
@@ -392,7 +392,7 @@ class Permata:
         log("[permata] statement flag found ({}; score {:.2f})".format(image, score))
         wait = self.config.get("permata_ind_flag_wait", 3.0)
         log("[permata] waiting {:.1f}s before clicking the flag".format(wait))
-        time.sleep(wait)
+        stop_sleep(wait)
         self.driver.click_at(center)
 
     # ---------------------------------------------------------------- logout
@@ -433,10 +433,10 @@ class Permata:
 
         open_wait = self.config.get("permata_logout_open_wait", 2.0)
         log("[permata] waiting {:.1f}s for the logout menu".format(open_wait))
-        time.sleep(open_wait)
+        stop_sleep(open_wait)
 
         log("[permata] logging out with Tab, Tab, Enter")
         self.driver.tab(2)
         self.driver.press_enter()
         self.driver.logout_image_found = True
-        time.sleep(self.config.get("permata_logout_process_wait", 3.0))
+        stop_sleep(self.config.get("permata_logout_process_wait", 3.0))

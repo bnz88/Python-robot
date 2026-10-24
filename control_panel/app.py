@@ -10,6 +10,7 @@ admin credentials, the secret key, and the SQLite database path.
 
 import json
 import os
+import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -96,6 +97,24 @@ def _visible_banks():
     return [bank for bank in BANK_ORDER if bank not in HIDDEN_BANKS]
 
 
+LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def _valid_label(label):
+    """Labels double as output filenames, so keep them filesystem-safe."""
+    return bool(LABEL_RE.match(str(label or "")))
+
+
+def _label_collision(label):
+    """Existing label that collides case-insensitively, or None."""
+    folded = str(label or "").casefold()
+    for row in db.list_accounts(DB_PATH):
+        existing = row["label"]
+        if existing != label and existing.casefold() == folded:
+            return existing
+    return None
+
+
 def _account_hidden(label):
     """True when *label* belongs to a hidden bank (for operator guards)."""
     owner = db.get_account_owner(DB_PATH, label)
@@ -154,11 +173,28 @@ def relay_json(robot, method, path, **kwargs):
     result = relay(robot, method, path, **kwargs)
     if not result["ok"]:
         return result
+    result["http_ok"] = 200 <= result.get("status", 0) < 300
     try:
         result["data"] = json.loads(result["body"])
     except ValueError:
         result["data"] = None
     return result
+
+
+def relay_payload(result, default_status=502):
+    """Turn a relay result into a Flask response, preserving robot 4xx errors."""
+    if not result.get("ok"):
+        return jsonify(result), default_status
+    status = result.get("status") or default_status
+    data = result.get("data")
+    if 200 <= status < 300:
+        return jsonify(data if data is not None else {})
+    if 400 <= status < 500 and isinstance(data, dict):
+        return jsonify(data), status
+    message = None
+    if isinstance(data, dict):
+        message = data.get("error")
+    return _json_error(message or result.get("error") or "robot error", 502)
 
 
 def relay_bytes(robot, path, timeout=4.0):
@@ -183,12 +219,13 @@ def relay_bytes(robot, path, timeout=4.0):
 
 
 def fetch_status(robot):
-    result = relay_json(robot, "GET", "/control/status", timeout=4.0)
+    result = relay_json(robot, "GET", "/control/status", timeout=2.0)
     if not result["ok"]:
         error = result.get("error", "")
         return {
             "online": False,
             "running": False,
+            "stopping": False,
             "pid": None,
             "current_account": None,
             "next_account": None,
@@ -196,9 +233,22 @@ def fetch_status(robot):
             "auth_error": error.startswith("auth failed"),
         }
     data = result.get("data") or {}
+    if not result.get("http_ok"):
+        error = data.get("error") if isinstance(data, dict) else None
+        return {
+            "online": False,
+            "running": False,
+            "stopping": False,
+            "pid": None,
+            "current_account": None,
+            "next_account": None,
+            "error": error or "robot status request failed",
+            "auth_error": False,
+        }
     return {
         "online": True,
         "running": bool(data.get("running")),
+        "stopping": bool(data.get("stopping")),
         "pid": data.get("pid"),
         "current_account": data.get("current_account"),
         "next_account": data.get("next_account"),
@@ -319,12 +369,18 @@ def live_page():
 @auth.login_required
 def api_robots():
     now = time.time()
-    if _status_cache["data"] is not None and (now - _status_cache["ts"]) < 2.0:
+    if _status_cache["data"] is not None and (now - _status_cache["ts"]) < 1.5:
         return jsonify(_status_cache["data"])
 
     robots = db.list_robots(DB_PATH)
     out = []
-    for robot in robots:
+    if robots:
+        workers = max(1, min(8, len(robots)))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            statuses = list(executor.map(fetch_status, robots))
+    else:
+        statuses = []
+    for robot, status in zip(robots, statuses):
         item = {
             "id": robot["id"],
             "name": robot["name"],
@@ -333,7 +389,7 @@ def api_robots():
             "default_proxy_ip": robot.get("default_proxy_ip", ""),
             "default_proxy_port": robot.get("default_proxy_port", ""),
         }
-        item.update(fetch_status(robot))
+        item.update(status)
         item["last_seen"] = now if item["online"] else None
         out.append(item)
 
@@ -343,27 +399,33 @@ def api_robots():
 
 
 # ------------------------------------------------------------------ robot CRUD
+def _parse_port(value):
+    """Return a valid TCP port as int, or None."""
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        return None
+    return port if 0 < port < 65536 else None
+
+
 @app.route("/api/robots", methods=["POST"])
 @auth.admin_required
 def api_robot_add():
     data = request.get_json(silent=True) or request.form
     name = (data.get("name") or "").strip()
     host = (data.get("host") or "").strip()
-    port = data.get("port")
-    if not name or not host or port in (None, ""):
-        return _json_error("name, host and port are required", 400)
-    try:
-        port = int(port)
-    except (TypeError, ValueError):
-        return _json_error("port must be an integer", 400)
+    port = _parse_port(data.get("port"))
+    if not name or not host or port is None:
+        return _json_error("name, host and a valid port are required", 400)
+    proxy_ip, proxy_port = proxy_defaults(data)
     robot_id = db.add_robot(
         DB_PATH,
         name,
         host,
         port,
         token=(data.get("token") or "").strip(),
-        proxy_ip=proxy_defaults(data)[0],
-        proxy_port=proxy_defaults(data)[1],
+        proxy_ip=proxy_ip,
+        proxy_port=proxy_port,
     )
     invalidate_cache()
     return jsonify({"id": robot_id, "ok": True})
@@ -376,9 +438,26 @@ def api_robot_edit(robot_id):
         return _json_error("unknown robot", 404)
     data = request.get_json(silent=True) or request.form
     fields = {}
-    for key in ("name", "host", "port", "token"):
-        if key in data and data[key] is not None:
-            fields[key] = data[key]
+    if "name" in data:
+        name = (data.get("name") or "").strip()
+        if not name:
+            return _json_error("name cannot be empty", 400)
+        fields["name"] = name
+    if "host" in data:
+        host = (data.get("host") or "").strip()
+        if not host:
+            return _json_error("host cannot be empty", 400)
+        fields["host"] = host
+    if "port" in data:
+        port = _parse_port(data.get("port"))
+        if port is None:
+            return _json_error("port must be a number between 1 and 65535", 400)
+        fields["port"] = port
+    # The edit dialog cannot show the stored token, so an empty field means
+    # "keep the current token" rather than "clear it".
+    token = (data.get("token") or "").strip()
+    if token:
+        fields["token"] = token
     if any(k in data for k in ("proxy_id", "default_proxy_ip", "default_proxy_port")):
         proxy_ip, proxy_port = proxy_defaults(data)
         fields["default_proxy_ip"] = proxy_ip
@@ -439,7 +518,7 @@ def api_robot_start(robot_id):
     if not result["ok"]:
         return jsonify(result), 502
     invalidate_cache()
-    return jsonify(result.get("data") or {})
+    return relay_payload(result)
 
 
 @app.route("/api/robots/<int:robot_id>/stop", methods=["POST"])
@@ -448,11 +527,11 @@ def api_robot_stop(robot_id):
     robot = _get_robot_or_none(robot_id)
     if not robot:
         return _json_error("unknown robot", 404)
-    result = relay_json(robot, "POST", "/control/stop")
+    result = relay_json(robot, "POST", "/control/stop", timeout=8.0)
     if not result["ok"]:
         return jsonify(result), 502
     invalidate_cache()
-    return jsonify(result.get("data") or {})
+    return relay_payload(result)
 
 
 @app.route("/api/robots/<int:robot_id>/next", methods=["POST"])
@@ -465,12 +544,14 @@ def api_robot_next(robot_id):
     label = (data.get("label") or "").strip()
     if not label:
         return _json_error("label is required", 400)
+    if not _is_admin() and _account_hidden(label):
+        return _json_error("account '{}' is not available".format(label), 403)
     path = "/next?label={}".format(quote(label, safe=""))
     result = relay_json(robot, "POST", path, timeout=6.0)
     if not result["ok"]:
         return jsonify(result), 502
     invalidate_cache()
-    return jsonify(result.get("data") or {})
+    return relay_payload(result)
 
 
 # ------------------------------------------------------------------ accounts
@@ -483,7 +564,9 @@ def api_robot_accounts(robot_id):
     result = relay_json(robot, "GET", "/accounts")
     if not result["ok"]:
         return jsonify(result), 502
-    accounts = result.get("data") or []
+    accounts = result.get("data")
+    if not result.get("http_ok") or not isinstance(accounts, list):
+        return _json_error("robot did not return an account list", 502)
     if not _is_admin():
         accounts = [acc for acc in accounts if not _bank_hidden(acc.get("bank"))]
     return jsonify(accounts)
@@ -511,7 +594,7 @@ def _toggle_account(robot_id, label, action):
     result = relay_json(robot, "POST", path)
     if not result["ok"]:
         return jsonify(result), 502
-    return jsonify(result.get("data") or {})
+    return relay_payload(result)
 
 
 @app.route("/api/robots/<int:robot_id>/accounts/<label>/update", methods=["POST"])
@@ -521,6 +604,8 @@ def api_account_update(robot_id, label):
     if not robot:
         return _json_error("unknown robot", 404)
     data = request.get_json(silent=True) or request.form
+    if "bank" in data and str(data.get("bank") or "") not in BANK_ORDER:
+        return _json_error("unknown bank", 400)
     if not _is_admin():
         if _bank_hidden(data.get("bank")) or _account_hidden(label):
             return _json_error("account '{}' is not available".format(label), 403)
@@ -534,18 +619,17 @@ def api_account_update(robot_id, label):
     if not result["ok"]:
         return jsonify(result), 502
     invalidate_cache()
-    return jsonify(result.get("data") or {})
+    return relay_payload(result)
 
 
 # ---------------------------------------------------------- global accounts
 def _poll_one_robot(robot):
     res = relay_json(robot, "GET", "/accounts", timeout=4.0)
-    if res["ok"]:
-        accounts = res.get("data")
-        accounts = accounts if isinstance(accounts, list) else []
-    else:
+    accounts = res.get("data") if res.get("ok") and res.get("http_ok") else None
+    if not isinstance(accounts, list):
         accounts = None
-    return robot["id"], {"robot": robot, "ok": res["ok"], "accounts": accounts}
+    ok = accounts is not None
+    return robot["id"], {"robot": robot, "ok": ok, "accounts": accounts}
 
 
 def poll_accounts_all():
@@ -559,6 +643,10 @@ def poll_accounts_all():
 def reconcile_accounts(polled):
     """Refresh the ownership registry from live robots; return conflicting labels."""
     counts = {}
+    existing = {
+        (row["robot_id"], row["label"]): row.get("bank") or ""
+        for row in db.list_accounts(DB_PATH)
+    }
     for rid, info in polled.items():
         if not info["ok"]:
             continue
@@ -568,9 +656,21 @@ def reconcile_accounts(polled):
             if not label:
                 continue
             labels.append(label)
-            db.upsert_account(DB_PATH, label, acc.get("bank", ""), rid)
+            bank = acc.get("bank") or ""
+            if existing.get((rid, label)) != bank:
+                db.upsert_account(DB_PATH, label, bank, rid)
             counts.setdefault(label, set()).add(rid)
-        db.prune_robot_accounts(DB_PATH, rid, labels)
+        wanted = set(labels)
+        stale = [
+            label
+            for (robot_id, label) in existing
+            if robot_id == rid and label not in wanted
+        ]
+        if stale:
+            db.prune_robot_accounts(DB_PATH, rid, labels)
+    valid_ids = {r["id"] for r in db.list_robots(DB_PATH)}
+    if any(robot_id not in valid_ids for (robot_id, _label) in existing):
+        db.delete_orphan_accounts(DB_PATH, valid_ids)
     return sorted(label for label, rids in counts.items() if len(rids) > 1)
 
 
@@ -650,8 +750,20 @@ def api_account_add():
         return _json_error(
             "robot_id, label, bank, username and password are required", 400
         )
+    if not _valid_label(label):
+        return _json_error(
+            "label may only contain letters, numbers, dots, dashes and "
+            "underscores (max 64 characters, must start with a letter or number)",
+            400,
+        )
     if _bank_hidden(bank) and not _is_admin():
         return _json_error("bank '{}' is not available".format(bank), 403)
+    collision = _label_collision(label)
+    if collision:
+        return _json_error(
+            "label '{}' collides with existing label '{}'".format(label, collision),
+            409,
+        )
     try:
         robot_id = int(robot_id)
     except (TypeError, ValueError):
@@ -661,7 +773,7 @@ def api_account_add():
         return _json_error("unknown robot", 404)
 
     owner = db.get_account_owner(DB_PATH, label)
-    if owner and owner["robot_id"] != robot_id:
+    if owner:
         return _json_error(
             "account '{}' is already assigned to robot '{}'".format(
                 label, owner.get("robot_name") or owner["robot_id"]
@@ -837,12 +949,16 @@ def api_robot_statement(robot_id, label):
     if not robot:
         return _json_error("unknown robot", 404)
     bank = request.args.get("bank", "mybca")
+    if not _is_admin() and (_bank_hidden(bank) or _account_hidden(label)):
+        return _json_error("account '{}' is not available".format(label), 403)
     path = "/{}/{}".format(quote(bank, safe=""), quote(label, safe=""))
     result = relay(robot, "GET", path)
     if not result["ok"]:
         return jsonify(result), 502
     if result["status"] == 404:
         return jsonify({"ok": False, "text": None, "error": "no output yet"}), 404
+    if result["status"] != 200:
+        return _json_error("robot rejected the statement request", 502)
     return jsonify({"ok": True, "text": result["body"]})
 
 
@@ -968,16 +1084,55 @@ def api_user_delete(user_id):
     return jsonify({"ok": True})
 
 
+def _warn_label_collisions():
+    """Print labels that would share the same output file on disk."""
+    groups = {}
+    for row in db.list_accounts(DB_PATH):
+        label = row["label"]
+        stem = re.sub(r"[^A-Za-z0-9._-]+", "_", str(label)).strip("._-")
+        stem = (stem or "account").casefold()
+        groups.setdefault(stem, set()).add(label)
+    for stem, labels in groups.items():
+        if len(labels) > 1:
+            print(
+                "WARNING: labels {} all map to output file {!r}; "
+                "rename them to avoid overwriting statements.".format(
+                    ", ".join(sorted(labels)), stem + ".txt"
+                )
+            )
+
+
 def main():
+    root = os.path.dirname(BASE_DIR)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from utils.instance_lock import acquire_instance_lock
+
+    instance_lock = acquire_instance_lock(
+        os.path.join(root, "output", "panel.lock")
+    )
+    if instance_lock is None:
+        print(
+            "another control panel is already running (output/panel.lock) - "
+            "exiting so it keeps serving."
+        )
+        raise SystemExit(1)
+
     db.init_db(DB_PATH)
     admin_user = config.get("admin_username", "admin")
     admin_pass = config.get("admin_password", "")
     db.seed_admin(DB_PATH, admin_user, auth.hash_password(admin_pass))
+    _warn_label_collisions()
 
     host = config.get("panel_host", "127.0.0.1")
     port = int(config.get("panel_port", 5000))
+    try:
+        threads = int(config.get("panel_threads", 8))
+    except (TypeError, ValueError):
+        threads = 8
+    threads = min(32, max(4, threads))
     print("control panel listening on http://{}:{}".format(host, port))
-    serve(app, host=host, port=port)
+    serve(app, host=host, port=port, threads=threads)
 
 
 if __name__ == "__main__":

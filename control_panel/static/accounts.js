@@ -84,12 +84,20 @@ async function onAction(e) {
       if (res.error) { setStatus(res.error, true); }
       else { setStatus(`${label} will be scraped next (one time).`); }
     }
-    else if (act === "ban") await post(`/api/robots/${id}/accounts/${encodeURIComponent(label)}/ban`);
-    else if (act === "unban") await post(`/api/robots/${id}/accounts/${encodeURIComponent(label)}/unban`);
+    else if (act === "ban" || act === "unban") {
+      const res = await post(
+        `/api/robots/${id}/accounts/${encodeURIComponent(label)}/${act}`
+      );
+      if (res.error) setStatus(res.error, true);
+    }
     else if (act === "remove") {
       if (!confirm(`Remove account "${label}" from this robot?`)) return;
       setStatus("Removing account...");
-      await post("/api/accounts/remove", { robot_id: id, label });
+      const res = await post("/api/accounts/remove", { robot_id: id, label });
+      if (res.error) {
+        setStatus(res.error, true);
+        return;
+      }
     }
     await loadAccounts();
   } catch (err) {
@@ -100,6 +108,9 @@ async function onAction(e) {
 function openAccountEdit(id, label, bank, uniqueId, shortname) {
   const form = $("#account-edit-form");
   form.dataset.currentRobot = String(id);
+  form.dataset.currentBank = bank || "";
+  form.dataset.currentUid = uniqueId || "";
+  form.dataset.currentShort = shortname || "";
   form.label.value = label;
   $("#acct-edit-label").textContent = label;
   const robotSel = $("#acct-edit-robot");
@@ -119,6 +130,9 @@ async function submitAccountEdit(e) {
   const fd = new FormData(e.target);
   const robotId = fd.get("robot_id");
   const currentRobot = e.target.dataset.currentRobot;
+  const oldBank = e.target.dataset.currentBank || "";
+  const oldUid = e.target.dataset.currentUid || "";
+  const oldShort = e.target.dataset.currentShort || "";
   const label = fd.get("label");
   const bank = fd.get("bank");
   const uid = fd.get("unique_id");
@@ -136,13 +150,35 @@ async function submitAccountEdit(e) {
       const removeRes = await post("/api/accounts/remove", { robot_id: currentRobot, label });
       if (removeRes.error) { setStatus(removeRes.error, true); return; }
       const addRes = await post("/api/accounts", { robot_id: robotId, label, bank, username, password, unique_id: uid, bank_shortname: short });
-      if (addRes.error) { setStatus(addRes.error, true); return; }
+      if (addRes.error) {
+        const rollback = await post("/api/accounts", {
+          robot_id: currentRobot,
+          label,
+          bank: oldBank || bank,
+          username,
+          password,
+          unique_id: oldUid,
+          bank_shortname: oldShort,
+        });
+        setStatus(
+          rollback.error
+            ? `Move failed (${addRes.error}); restoring the account also failed: ${rollback.error}`
+            : `Move failed (${addRes.error}); the account was kept on the original robot.`,
+          true
+        );
+        await loadAccounts();
+        return;
+      }
       setStatus("Account moved.");
     } else {
       const payload = { bank, unique_id: uid, bank_shortname: short };
       if (username) payload.username = username;
       if (password) payload.password = password;
-      await post(`/api/robots/${robotId}/accounts/${encodeURIComponent(label)}/update`, payload);
+      const res = await post(`/api/robots/${robotId}/accounts/${encodeURIComponent(label)}/update`, payload);
+      if (res.error) {
+        setStatus(res.error, true);
+        return;
+      }
       setStatus("Account saved.");
     }
     $("#account-edit-dialog").close();

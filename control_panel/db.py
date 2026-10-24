@@ -34,13 +34,22 @@ CREATE TABLE IF NOT EXISTS proxies (
 
 
 def connect(db_path):
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=5.0)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.execute("PRAGMA synchronous = NORMAL")
+    except sqlite3.DatabaseError:
+        pass
     return conn
 
 
 def init_db(db_path):
     with closing(connect(db_path)) as conn:
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+        except sqlite3.DatabaseError:
+            pass
         conn.executescript(SCHEMA)
         _migrate(conn)
         conn.commit()
@@ -258,6 +267,23 @@ def prune_robot_accounts(db_path, robot_id, labels):
             )
         else:
             conn.execute("DELETE FROM accounts WHERE robot_id = ?", (int(robot_id),))
+        conn.commit()
+
+
+def delete_orphan_accounts(db_path, robot_ids):
+    """Remove registry rows whose robot was deleted from the panel."""
+    ids = [int(rid) for rid in robot_ids]
+    with closing(connect(db_path)) as conn:
+        if ids:
+            placeholders = ",".join("?" for _ in ids)
+            conn.execute(
+                "DELETE FROM accounts WHERE robot_id NOT IN ({})".format(
+                    placeholders
+                ),
+                ids,
+            )
+        else:
+            conn.execute("DELETE FROM accounts")
         conn.commit()
 
 

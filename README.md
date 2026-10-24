@@ -128,7 +128,7 @@ missing.
    - `account_cooldown_seconds` — minimum seconds between scrapes of the same account (180 = 3 minutes).
    - `python_exe` — python to use for `/control/start` (defaults to the interpreter running `api.py`).
    - `scraper_script` — script launched by `/control/start` (default `main.py`).
-   - `stop_timeout` — seconds to wait after issuing a stop before giving up (default 20).
+   - `stop_grace_seconds` — seconds the scraper gets to exit cleanly after `/control/stop` before its process tree is force-killed (default 3, clamped 1–10). `stop_timeout` is deprecated and no longer controls the stop.
    - `proxy_ip` / `proxy_port` — optional default HTTP proxy for Chrome (no auth); `--proxy-ip`/`--proxy-port` passed via `/control/start` override these.
    - `mybca_logout_wait` / `mybca_logout_process_wait` — seconds to wait before clicking logout and after it, respectively.
 
@@ -318,14 +318,17 @@ Host/port come from `config.json` (`api_host`, `api_port`; default
 | Request | Response |
 |---|---|
 | `GET\|POST /control/start[?account=mybca\|klikbca][&ip=1.2.3.4&port=8080]` | `200` `{"started":bool,"running":true,"pid":int,"message":...}` |
-| `GET\|POST /control/stop` | `200` `{"stopped":bool,"running":false,"message":...}` |
-| `GET /control/status` | `200` `{"running":bool,"pid":int\|null,"returncode":int\|null}` |
+| `GET\|POST /control/stop` | `202` `{"stopped":false,"stopping":true,"running":true,"pid":int}` while stopping; `200` `{"stopped":false,"stopping":false,"running":false}` when idle |
+| `GET /control/status` | `200` `{"running":bool,"stopping":bool,"pid":int\|null,"returncode":int\|null}` |
 
 `/control/start` launches `python main.py` (optionally `--account <bank>`) in a new
 visible console window on the desktop, so the scraper's verbose log messages are shown
-as it runs. It refuses to start a second instance while one is running. `/control/stop`
-force-kills the scraper's process tree (python plus any Chrome it opened), which closes
-that console window and stops the script. Scraper logs live in the console window only.
+as it runs. It refuses to start a second instance while one is running or stopping.
+`/control/stop` returns immediately: the scraper is asked to stop through a flag it
+polls, and if it has not exited within `stop_grace_seconds` its process tree (python
+plus any Chrome it opened) is force-killed. A pid file in `output/scraper.pid` lets a
+restarted API adopt a running scraper, so Stop keeps working after an API restart.
+Scraper logs live in the console window and in `log_file` when configured.
 
 Passing `ip` and `port` makes every Chrome window the scraper opens use that HTTP proxy
 (`--proxy-server=http://ip:port`); no proxy username/password is used. If only one of
@@ -367,17 +370,18 @@ python control_panel/app.py   # serves http://127.0.0.1:5000 by default
 Panel configuration lives in `control_panel/config.json` (`panel_host`,
 `panel_port`, `secret_key`, `db_path`, and the seeded `admin_username` /
 `admin_password`). Robots are added from the dashboard UI; each robot's token is
-stored in `control_panel/panel.db` (never account credentials). The panel has
-three pages: **Dashboard** (robot status + start/stop + per-robot logs + a live
-feed of the selected robot with start/stop and an enlarge button; its account
-table shows the bank icon left of each Label, a Ban/Unban toggle and no Remove
-button — accounts are removed on the Accounts page only), **Accounts**
-(add/remove bank accounts across robots — each label is globally
+stored in `control_panel/panel.db` (never account credentials). Pages: **Dashboard**
+(robot status + start/stop + per-robot logs + a live feed of the selected robot with
+start/stop and an enlarge button; its account table shows the bank icon left of each
+Label, a Ban/Unban toggle and no Remove button — accounts are removed on the Accounts
+page only), **Robot** (admins only: register/edit/delete robots and start/stop them),
+**Accounts** (add/remove bank accounts across robots — each label is globally
 unique and can belong to only one robot), **Live Logs** (one auto-refreshing
 log window per robot, headed by which account is being scraped now and which is
-next), and **Proxies** (admins manage the proxy list used when adding or editing
+next), **Proxies** (admins manage the proxy list used when adding or editing
 a robot, plus a per-robot **Test Connection** that measures
-robot → proxy → bank-login latency; operators can view the list and run the test).
+robot → proxy → bank-login latency; operators can view the list and run the test),
+and, for admins, **Settings** (per-robot `config.json`) and **Users**.
 
 Bank logos live in `control_panel/static/bank-icons/` (`bca.svg` for both myBCA and
 KlikBCA, `cimb.svg` for CIMB Niaga, `permata.svg` for Permata) and are shown 24 px
@@ -387,9 +391,10 @@ panel internal — replace the files with your own artwork if needed.
 
 `hidden_banks` in `control_panel/config.json` hides banks from **operators**
 while keeping the accounts intact: they do not appear in the bank dropdowns, the
-account lists or the dashboard filter, and add/edit/ban/unban/remove/start for
-those accounts are rejected with 403. Admins keep full access, so the bank can be
-re-exposed by removing it from the list (restart the panel after editing):
+account lists or the dashboard filter, and add/edit/ban/unban/remove/start/next/
+statement requests for those accounts are rejected with 403. Admins keep full
+access, so the bank can be re-exposed by removing it from the list (restart the
+panel after editing):
 
 ```json
 "hidden_banks": ["mybca"]

@@ -6,7 +6,8 @@ const state = {
 };
 
 async function loadRobots() {
-  state.robots = await get("/api/robots");
+  const robots = await get("/api/robots");
+  state.robots = Array.isArray(robots) ? robots : [];
   renderRobots();
 }
 
@@ -37,12 +38,12 @@ function renderRobots() {
       <td>${esc(r.name)}</td>
       <td>${esc(r.host)}:${esc(String(r.port))}</td>
       <td class="${statusCls}">${esc(statusText)}</td>
-      <td>${r.running ? "running" : "stopped"}</td>
+      <td>${r.stopping ? "stopping" : r.running ? "running" : "stopped"}</td>
       <td>${r.pid == null ? "" : esc(String(r.pid))}</td>
       <td>${esc(proxy)}</td>
       <td>
-        <button data-act="start" data-id="${r.id}"${r.running ? " disabled" : ""}>Start</button>
-        <button data-act="stop" data-id="${r.id}"${r.running ? "" : " disabled"}>Stop</button>
+        <button data-act="start" data-id="${r.id}"${r.running || r.stopping ? " disabled" : ""}>Start</button>
+        <button data-act="stop" data-id="${r.id}"${r.running && !r.stopping ? "" : " disabled"}>Stop</button>
         <button data-act="edit" data-id="${r.id}">Edit</button>
         <button data-act="delete" data-id="${r.id}">Delete</button>
       </td>`;
@@ -56,6 +57,8 @@ async function startRobot(id) {
   try {
     const res = await post(`/api/robots/${id}/start`, body);
     if (res.error) setStatus(res.error, true);
+    else if (res.started) setStatus("Scraper starting...");
+    else if (res.message) setStatus(res.message);
   } catch (err) {
     setStatus(err.message, true);
   }
@@ -66,6 +69,7 @@ async function stopRobot(id) {
   try {
     const res = await post(`/api/robots/${id}/stop`);
     if (res.error) setStatus(res.error, true);
+    else if (res.stopping) setStatus("Stopping scraper...");
   } catch (err) {
     setStatus(err.message, true);
   }
@@ -96,7 +100,8 @@ function openEdit(id) {
   form.name.value = r.name;
   form.host.value = r.host;
   form.port.value = r.port;
-  form.token.value = r.token || "";
+  form.token.value = "";
+  form.token.placeholder = "leave blank to keep current";
   const proxySel = form.querySelector(".proxy-select");
   const match = (state.proxies || []).find(
     (p) =>
@@ -111,11 +116,19 @@ async function submitEdit(e) {
   e.preventDefault();
   const fd = new FormData(e.target);
   const id = fd.get("id");
+  const payload = Object.fromEntries(fd.entries());
+  if (!payload.token) delete payload.token;
   try {
-    await post(`/api/robots/${id}/edit`, Object.fromEntries(fd.entries()));
+    const res = await post(`/api/robots/${id}/edit`, payload);
+    if (res.error) {
+      setStatus(res.error, true);
+      return;
+    }
   } catch (err) {
     setStatus(err.message, true);
+    return;
   }
+  setStatus("Robot saved.");
   $("#edit-dialog").close();
   await loadRobots();
 }
@@ -124,11 +137,17 @@ async function submitAdd(e) {
   e.preventDefault();
   const fd = new FormData(e.target);
   try {
-    await post("/api/robots", Object.fromEntries(fd.entries()));
+    const res = await post("/api/robots", Object.fromEntries(fd.entries()));
+    if (res.error) {
+      setStatus(res.error, true);
+      return;
+    }
   } catch (err) {
     setStatus(err.message, true);
+    return;
   }
   e.target.reset();
+  setStatus("Robot added.");
   await loadProxyOptions();
   await loadRobots();
 }
@@ -162,7 +181,16 @@ function init() {
   });
   loadProxyOptions();
   loadRobots();
-  setInterval(loadRobots, 2500);
+  const pollRobots = async () => {
+    try {
+      await loadRobots();
+    } catch (err) {
+      setStatus(err.message, true);
+    }
+    const fast = state.robots.some((r) => r.stopping);
+    window.setTimeout(pollRobots, fast ? 800 : 2500);
+  };
+  window.setTimeout(pollRobots, 2500);
 }
 
 init();

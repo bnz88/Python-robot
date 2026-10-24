@@ -37,6 +37,7 @@
   "log_file": "output/scraper.log",
   "python_exe": null,
   "scraper_script": "main.py",
+  "stop_grace_seconds": 3.0,
   "stop_timeout": 20,
   "proxy_ip": "",
   "proxy_port": null,

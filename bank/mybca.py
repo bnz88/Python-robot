@@ -6,10 +6,10 @@ After scraping, log out via the top-right logout button.
 """
 
 import os
-import time
 
 from bank.base import ChromeDriver
 from utils.output import log, write_account_txt
+from utils.stop import sleep as stop_sleep
 
 
 class MyBCA:
@@ -40,7 +40,7 @@ class MyBCA:
 
         statement_wait = self.config.get("mybca_statement_wait", 10.0)
         log("[mybca] waiting {:.1f}s for the statement to generate".format(statement_wait))
-        time.sleep(statement_wait)
+        stop_sleep(statement_wait)
 
         if capture_mode:
             input(
@@ -69,21 +69,21 @@ class MyBCA:
         self.driver.focus()
         form_wait = self.config.get("mybca_login_wait", 3.0)
         log("[mybca] waiting {:.1f}s for the login form".format(form_wait))
-        time.sleep(form_wait)
+        stop_sleep(form_wait)
         self.driver.type_text(username)
         self.driver.tab(1)
         self.driver.type_text(password)
         self.driver.press_enter()
         dashboard_wait = self.config.get("mybca_dashboard_wait", 5.0)
         log("[mybca] waiting {:.1f}s for the dashboard".format(dashboard_wait))
-        time.sleep(dashboard_wait)
+        stop_sleep(dashboard_wait)
         self.driver.handle_challenge()
 
     def _logout(self):
         """Click the logout button at the top-right corner, then confirm if needed."""
         logout_wait = self.config.get("mybca_logout_wait", 2.0)
         log("[mybca] waiting {:.1f}s before logout".format(logout_wait))
-        time.sleep(logout_wait)
+        stop_sleep(logout_wait)
         logout_img = self.driver.asset_path("logout_button.png")
         self.driver.logout_image_found = os.path.exists(logout_img)
         if os.path.exists(logout_img):
@@ -101,15 +101,15 @@ class MyBCA:
             y = 110 if y is None else y
             log("[mybca] clicking logout at top-right ({}, {})".format(x, y))
             self.driver.click_point(x, y)
-        time.sleep(self.config["delay_long"])
+        stop_sleep(self.config["delay_long"])
 
         if os.path.exists(self.driver.asset_path("logout_confirm.png")):
             log("[mybca] confirming logout")
             self.driver.click_image("logout_confirm.png")
-            time.sleep(self.config["delay_long"])
+            stop_sleep(self.config["delay_long"])
 
         process_wait = self.config.get("mybca_logout_process_wait", 3.0)
         log("[mybca] waiting {:.1f}s for logout to complete".format(process_wait))
-        time.sleep(process_wait)
+        stop_sleep(process_wait)
 
         log("[mybca] logged out")

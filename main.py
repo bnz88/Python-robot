@@ -24,6 +24,7 @@ from bank.cimb import CIMB
 from bank.klikbca import KlikBCA
 from bank.mybca import MyBCA
 from bank.permata import Permata
+from utils.housekeeping import cleanup_stale_profiles
 from utils.output import (
     account_output_path,
     configure_log_file,
@@ -36,6 +37,11 @@ from utils.proxy_latency import (
     pick_proxies_for_banks,
     slow_threshold_ms,
 )
+from utils.stop import StopRequested
+from utils.stop import check as check_stop
+from utils.stop import clear_stop
+from utils.stop import sleep as stop_sleep
+from utils.stop import start_watching
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
@@ -710,11 +716,20 @@ def main():
 
     config = load_config()
 
+    # Drop a stop flag left by a previous run, then watch for the panel's stop
+    # request so a stop always exits through the normal cleanup path.
+    clear_stop(config, BASE_DIR)
+    start_watching(config, BASE_DIR)
+
     log_file = config.get("log_file")
     if log_file and not os.path.isabs(log_file):
         log_file = os.path.join(BASE_DIR, log_file)
     if log_file:
         configure_log_file(log_file)
+
+    # Sweep Chrome profiles abandoned by a crash/hard kill so they cannot
+    # accumulate in the temp directory.
+    cleanup_stale_profiles()
 
     start_live_capture(config)
 
@@ -780,18 +795,19 @@ def main():
             return
 
         while True:
+            check_stop()
             try:
                 accounts = reload_enabled_accounts(bank_filter)
             except SystemExit as exc:
                 write_status(config, None, None)
                 log("accounts reload failed: {}; waiting 30s".format(exc))
-                time.sleep(30.0)
+                stop_sleep(30.0)
                 continue
 
             if not accounts:
                 write_status(config, None, None)
                 log("no enabled accounts to scrape; waiting 30s for a change")
-                time.sleep(30.0)
+                stop_sleep(30.0)
                 continue
 
             index = None
@@ -835,7 +851,7 @@ def main():
                         wait, upcoming
                     )
                 )
-                time.sleep(wait)
+                stop_sleep(wait)
                 if skipped:
                     skipped.clear()
                     scan_start = 0
@@ -886,7 +902,10 @@ def main():
 
             between = config.get("between_accounts_wait", 5.0)
             log("waiting {:.1f}s before checking the next account".format(between))
-            time.sleep(between)
+            stop_sleep(between)
+    except StopRequested:
+        write_status(config, None, None)
+        log("stop requested by the panel; exiting")
     except KeyboardInterrupt:
         log("interrupted by user; exiting")
 

@@ -15,7 +15,10 @@ import time
 import pyautogui
 
 from utils.clipboard import get_clipboard_text
+from utils.housekeeping import PROFILE_PREFIX
 from utils.output import log
+from utils.stop import check as check_stop
+from utils.stop import sleep as stop_sleep
 
 
 def _enable_dpi_awareness():
@@ -79,7 +82,7 @@ class ChromeDriver:
         # window, steals the foreground and breaks the keyboard macros, so any
         # existing instance is closed first (config: close_existing_chrome).
         self.close_existing_chrome()
-        self.profile_dir = tempfile.mkdtemp(prefix="bca_bot_profile_")
+        self.profile_dir = tempfile.mkdtemp(prefix=PROFILE_PREFIX)
         self._seed_no_password_manager()
         width, height = self.window_geometry()
         # Macros (focus, form click, select-all, myBCA logout) derive coordinates
@@ -129,7 +132,7 @@ class ChromeDriver:
         # Chrome window can be identified by diffing afterwards.
         existing_handles = set(self._caption_handles())
         self.process = subprocess.Popen(args)
-        time.sleep(self.config["page_load_wait"])
+        stop_sleep(self.config["page_load_wait"])
         new_handles = [
             hwnd for hwnd in self._caption_handles() if hwnd not in existing_handles
         ]
@@ -364,8 +367,17 @@ class ChromeDriver:
                 except Exception:
                     pass
             self.process = None
-        if self.profile_dir and os.path.isdir(self.profile_dir):
-            shutil.rmtree(self.profile_dir, ignore_errors=True)
+        if self.profile_dir:
+            # Chrome helper processes can still hold files for a moment after
+            # the parent exits, so retry before giving up (the startup sweep in
+            # utils.housekeeping removes anything left behind by a crash).
+            for _ in range(5):
+                if not os.path.isdir(self.profile_dir):
+                    break
+                shutil.rmtree(self.profile_dir, ignore_errors=True)
+                if not os.path.isdir(self.profile_dir):
+                    break
+                time.sleep(0.4)
             self.profile_dir = None
         self._own_handles = []
 
@@ -574,7 +586,7 @@ class ChromeDriver:
         time.sleep(self.config["delay_short"])
         pyautogui.write(url, interval=0.02)
         pyautogui.press("enter")
-        time.sleep(self.config["page_load_wait"])
+        stop_sleep(self.config["page_load_wait"])
         # A new origin starts at 100 %, so restore the configured page zoom.
         self.apply_page_zoom()
 
@@ -728,6 +740,7 @@ class ChromeDriver:
         deadline = time.time() + timeout
         best = 0.0
         while True:
+            check_stop()
             shot = pyautogui.screenshot()
             screen = cv2.cvtColor(np.array(shot), cv2.COLOR_RGB2BGR)
             scale_x, scale_y = self._mouse_scale(shot)
@@ -796,6 +809,7 @@ class ChromeDriver:
         method = None
         moved_before = False
         for index in range(1, max_steps + 1):
+            check_stop()
             method = self.scroll_page(
                 direction=1,
                 step_px=step,
@@ -848,6 +862,7 @@ class ChromeDriver:
         remaining steps stay fast.
         """
         notches = max(1, int(round(float(step_px) / float(max(1, wheel_px)))))
+        check_stop()
         width = self.config["window_width"]
         height = self.config["window_height"]
         page_key = "pagedown" if direction > 0 else "pageup"
@@ -928,6 +943,7 @@ class ChromeDriver:
 
     def scroll_to_top(self):
         """Scroll the focused page back to the top, without touching the mouse."""
+        check_stop()
         try:
             self.ensure_foreground()
             pyautogui.hotkey("ctrl", "home")
@@ -995,6 +1011,7 @@ class ChromeDriver:
 
         deadline = time.time() + timeout
         while True:
+            check_stop()
             screen = cv2.cvtColor(np.array(pyautogui.screenshot()), cv2.COLOR_RGB2BGR)
             if blur >= 3:
                 screen = cv2.GaussianBlur(screen, (blur, blur), 0)
@@ -1064,6 +1081,7 @@ class ChromeDriver:
         timeout = timeout if timeout is not None else self.config["image_timeout"]
         deadline = time.time() + timeout
         while time.time() < deadline:
+            check_stop()
             try:
                 if pyautogui.locateCenterOnScreen(path, confidence=confidence) is not None:
                     return True

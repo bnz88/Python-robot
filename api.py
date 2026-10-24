@@ -33,6 +33,7 @@ from utils.proxy_latency import (
     measure_proxy_latency,
     slow_threshold_ms,
 )
+from utils.stop import clear_stop, request_stop
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
@@ -434,6 +435,9 @@ class ProcessManager:
             except OSError:
                 pass
 
+            # Never let a leftover stop flag abort this fresh run.
+            clear_stop(self.config, self.base_dir)
+
             # Open a visible console window on the desktop so the scraper's
             # verbose logs (from utils.output.log) are shown as it runs. The
             # own process group lets /control/stop deliver Ctrl+Break.
@@ -467,24 +471,44 @@ class ProcessManager:
         with self.lock:
             if self.process is None or self.process.poll() is not None:
                 self.process = None
+                clear_stop(self.config, self.base_dir)
                 return {"stopped": False, "running": False, "message": "not running"}
             proc = self.process
 
-        # The scraper runs in its own console, so a console control signal
-        # cannot be delivered from here. Force-kill the process tree
-        # (python + any Chrome it opened); the console window closes when the
-        # process attached to it exits.
-        log("[api] stopping scraper pid {} (killing process tree)".format(proc.pid))
-        kill_tree(proc.pid)
+        # Ask the scraper to stop through the flag file it polls. It then exits
+        # through its normal cleanup path, so driver.close() terminates Chrome
+        # and removes the temporary profile. Fall back to a hard kill only when
+        # the scraper does not exit within the stop timeout.
+        try:
+            request_stop(self.config, self.base_dir)
+        except OSError as exc:
+            log("[api] could not write stop flag: {}".format(exc))
+
+        graceful = False
+        log(
+            "[api] stop requested for scraper pid {}; waiting up to {}s for a "
+            "clean exit".format(proc.pid, timeout)
+        )
         try:
             proc.wait(timeout=timeout)
+            graceful = True
         except Exception:
-            pass
+            log(
+                "[api] scraper pid {} did not stop in {}s; killing process "
+                "tree".format(proc.pid, timeout)
+            )
+            kill_tree(proc.pid)
+            try:
+                proc.wait(timeout=timeout)
+            except Exception:
+                pass
+        finally:
+            clear_stop(self.config, self.base_dir)
 
         with self.lock:
             self.process = None
 
-        log("[api] scraper stopped")
+        log("[api] scraper stopped ({})".format("cleanly" if graceful else "forced"))
         return {"stopped": True, "running": False, "message": "stopped"}
 
 

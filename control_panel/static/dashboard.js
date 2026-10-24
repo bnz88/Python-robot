@@ -9,6 +9,7 @@ const state = {
   selectedId: null,
   autoLog: true,
   proxies: [],
+  accounts: [],
   omittedEditing: null,
 };
 
@@ -20,10 +21,172 @@ async function loadRobots() {
   );
   if (state.selectedId && !stillSelected) {
     state.selectedId = null;
+    state.accounts = [];
     $("#robot-controls").hidden = true;
+    renderAccountQueue();
   }
   if (state.selectedId) await refreshSelected();
+  else renderKpis();
   refreshLive();
+}
+
+function renderRobotPicker() {
+  const sel = $("#robot-picker");
+  if (!sel) return;
+  const keep = state.selectedId == null ? "" : String(state.selectedId);
+  const html =
+    '<option value="">Select a robot&hellip;</option>' +
+    state.robots
+      .map((r) => {
+        const label = !r.online
+          ? "offline"
+          : r.auth_error
+            ? "auth failed"
+            : r.running
+              ? "running"
+              : "ready";
+        return `<option value="${r.id}">${esc(r.name)} - ${esc(label)}</option>`;
+      })
+      .join("");
+  if (sel.dataset.signature !== html) {
+    sel.innerHTML = html;
+    sel.dataset.signature = html;
+  }
+  const present = state.robots.some((r) => String(r.id) === keep);
+  sel.value = present ? keep : "";
+}
+
+function setMetric(id, html) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+}
+
+function renderKpis() {
+  if (!document.getElementById("kpi-online")) return;
+  const total = state.robots.length;
+  const online = state.robots.filter((r) => r.online).length;
+  const authIssues = state.robots.filter((r) => r.auth_error).length;
+  const running = state.robots.filter((r) => r.running);
+  const robot = selectedRobot();
+  const accounts = state.selectedId ? state.accounts || [] : [];
+  const enabled = accounts.filter((a) => a.enabled !== false).length;
+
+  setMetric("kpi-online", `${online}<small>/${total}</small>`);
+  setMetric(
+    "kpi-online-foot",
+    total === 0
+      ? "No robots configured yet"
+      : authIssues
+        ? `<span class="trend down">${authIssues} auth</span> needs attention`
+        : `<span class="trend">${online === total ? "all" : "partial"}</span> reachable`
+  );
+
+  const active = running[0];
+  setMetric("kpi-running", `${running.length}<small> running</small>`);
+  setMetric(
+    "kpi-running-foot",
+    active
+      ? `${esc(active.name)}${active.current_account ? " &middot; " + esc(active.current_account) : ""}`
+      : "No scraper running"
+  );
+
+  setMetric("kpi-accounts", `${accounts.length}`);
+  setMetric(
+    "kpi-accounts-foot",
+    !state.selectedId
+      ? "Select a robot to load accounts"
+      : robot && !robot.online
+        ? "Robot offline - accounts unavailable"
+        : `<span class="trend">${enabled} enabled</span> ${accounts.length - enabled} paused`
+  );
+
+  const next = robot && robot.next_account ? robot.next_account : null;
+  setMetric(
+    "kpi-next",
+    next ? `<span class="kpi-next-label">${esc(next)}</span>` : "&ndash;"
+  );
+  setMetric(
+    "kpi-next-foot",
+    robot && !robot.online
+      ? "Robot is offline"
+      : robot && robot.running
+        ? `now: ${esc(robot.current_account || "-")}`
+        : robot
+          ? "Robot is stopped"
+          : "Select a robot to see the queue"
+  );
+}
+
+function updateDeckState() {
+  const badge = $("#deck-state");
+  if (!badge) return;
+  const robot = selectedRobot();
+  if (!robot) {
+    badge.className = "badge";
+    badge.textContent = "idle";
+  } else if (!robot.online) {
+    badge.className = "badge badge-bad";
+    badge.textContent = "offline";
+  } else if (robot.auth_error) {
+    badge.className = "badge badge-warn";
+    badge.textContent = "auth failed";
+  } else if (robot.running) {
+    badge.className = "badge badge-ok";
+    badge.textContent = "running";
+  } else {
+    badge.className = "badge badge-info";
+    badge.textContent = "ready";
+  }
+
+  const blocked = !robot || !robot.online || !!robot.auth_error;
+  const start = $("#start-btn");
+  const stop = $("#stop-btn");
+  if (start) {
+    start.disabled = blocked || !!robot.running;
+    start.title = blocked ? "Robot is offline or auth failed" : "";
+  }
+  if (stop) {
+    stop.disabled = blocked || !robot.running;
+    stop.title = blocked ? "Robot is offline or auth failed" : "";
+  }
+}
+
+function syncScrapeButton() {
+  const select = $("#next-account-select");
+  const button = $("#next-account-btn");
+  if (!select || !button) return;
+  button.disabled = !state.selectedId || !select.value;
+}
+
+function renderAccountQueue() {
+  const select = $("#next-account-select");
+  if (!select) return;
+  const keep = select.value;
+  const accounts = state.selectedId ? state.accounts || [] : [];
+  const html =
+    '<option value="">Select an account&hellip;</option>' +
+    accounts
+      .filter((a) => a.enabled !== false)
+      .map(
+        (a) =>
+          `<option value="${esc(a.label)}">${esc(a.label)}${a.bank ? " - " + esc(a.bank) : ""}</option>`
+      )
+      .join("");
+  if (select.dataset.signature !== html) {
+    select.innerHTML = html;
+    select.dataset.signature = html;
+  }
+  if (keep && accounts.some((a) => a.label === keep)) select.value = keep;
+
+  const hint = $("#scrape-hint");
+  if (hint) {
+    hint.textContent = state.selectedId
+      ? accounts.length
+        ? "Only enabled accounts are listed. This does not change the saved queue."
+        : "No accounts available - the robot may be offline."
+      : "Select a robot to see its accounts.";
+  }
+  syncScrapeButton();
 }
 
 function renderRobots() {
@@ -70,6 +233,9 @@ function renderRobots() {
     $("#selected-name").textContent = sel.name;
     $("#selected-status").textContent = `now: ${sel.current_account || "-"}  |  next: ${sel.next_account || "-"}`;
   }
+  renderRobotPicker();
+  updateDeckState();
+  renderKpis();
 }
 
 async function refreshSelected() {
@@ -81,6 +247,7 @@ async function loadAccounts() {
   const id = state.selectedId;
   if (!id) return;
   const accounts = await get(`/api/robots/${id}/accounts`);
+  state.accounts = Array.isArray(accounts) ? accounts : [];
   renderAccounts(accounts);
 }
 
@@ -88,7 +255,11 @@ function renderAccounts(accounts) {
   if (state.omittedEditing) return;
   const tbody = $("#accounts-table tbody");
   tbody.innerHTML = "";
-  if (!Array.isArray(accounts)) return;
+  if (!Array.isArray(accounts)) {
+    renderAccountQueue();
+    renderKpis();
+    return;
+  }
   const sel = state.robots.find((x) => String(x.id) === String(state.selectedId));
   let current = null;
   let next = null;
@@ -116,7 +287,7 @@ function renderAccounts(accounts) {
       <td>${esc(last)}</td>
       <td><input class="omitted-input" data-label="${esc(a.label)}" value="${esc(a.omitted_rows == null ? "" : a.omitted_rows)}" placeholder="auto"></td>
       <td>
-        <button data-act="next" data-label="${esc(a.label)}">Jump Next</button>
+        <button data-act="next" data-label="${esc(a.label)}" title="Scrape this account next (one time)">Scrape now</button>
         <button data-act="view" data-label="${esc(a.label)}" data-bank="${esc(a.bank || "")}">View</button>
         ${
           a.enabled
@@ -126,6 +297,8 @@ function renderAccounts(accounts) {
       </td>`;
     tbody.appendChild(tr);
   }
+  renderAccountQueue();
+  renderKpis();
 }
 
 async function loadLogIfAuto() {
@@ -152,8 +325,31 @@ async function selectRobot(id) {
   $("#robot-controls").hidden = false;
   $("#accounts-title").textContent = "Accounts - " + r.name;
   $("#log-title").textContent = "Log - " + r.name;
+  const picker = $("#robot-picker");
+  if (picker) picker.value = String(id);
   renderRobots();
   await refreshSelected();
+}
+
+function clearSelection() {
+  state.selectedId = null;
+  state.accounts = [];
+  const controls = $("#robot-controls");
+  if (controls) controls.hidden = true;
+  const tbody = $("#accounts-table tbody");
+  if (tbody) tbody.innerHTML = "";
+  const log = $("#log-pane");
+  if (log) log.textContent = "Select a robot to see its log.";
+  const live = $("#live-panel");
+  if (live) live.hidden = true;
+  const modal = $("#live-modal");
+  if (modal && modal.open) modal.close();
+  const picker = $("#robot-picker");
+  if (picker) picker.value = "";
+  const selectedName = $("#selected-name");
+  if (selectedName) selectedName.textContent = "";
+  renderAccountQueue();
+  renderRobots();
 }
 
 async function startRobot() {
@@ -489,6 +685,34 @@ function init() {
   $("#edit-cancel").addEventListener("click", () => $("#edit-dialog").close());
   $("#edit-form").addEventListener("submit", submitEdit);
   $("#add-robot-form").addEventListener("submit", submitAdd);
+
+  const robotPicker = $("#robot-picker");
+  if (robotPicker) {
+    robotPicker.addEventListener("change", (e) => {
+      const value = e.target.value;
+      if (value) selectRobot(value);
+      else clearSelection();
+    });
+  }
+  const nextSelect = $("#next-account-select");
+  if (nextSelect) nextSelect.addEventListener("change", syncScrapeButton);
+  const nextBtn = $("#next-account-btn");
+  if (nextBtn) {
+    nextBtn.addEventListener("click", async () => {
+      if (!state.selectedId) {
+        setStatus("Select a robot first.", true);
+        return;
+      }
+      const label = nextSelect ? nextSelect.value : "";
+      if (!label) {
+        setStatus("Choose an account to scrape now.", true);
+        return;
+      }
+      await jumpNextAccount(label);
+      syncScrapeButton();
+    });
+  }
+  renderAccountQueue();
   $("#robots-table tbody").addEventListener("click", onRobotAction);
   $("#accounts-table tbody").addEventListener("click", onAccountAction);
   $("#accounts-table tbody").addEventListener("focusin", onOmittedFocus);

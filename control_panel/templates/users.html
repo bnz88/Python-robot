@@ -3,48 +3,68 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Banking Control Panel - Users</title>
+  <title>Users - BCA Ops</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 {% set active = 'users' %}
-  {% include '_header.html' %}
+{% set page_title = 'Users' %}
+{% set page_sub = 'Manage panel access. Operators can run robots and manage accounts; admins can also change settings.' %}
+<div class="app" id="app">
+  {% include '_sidebar.html' %}
+  <div class="main">
+    {% include '_header.html' %}
 
-  <main>
-    <p id="status" class="status"></p>
+    <main>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
 
-    <section class="panel">
-      <h2>Add user</h2>
-      <form id="add-user-form">
-        <div class="field"><span class="fl">Username</span>
-          <input name="username" placeholder="username" autocomplete="off" required>
+      <section class="card panel">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">Add user</h2>
+            <p class="card-sub">Each person gets their own login and role.</p>
+          </div>
         </div>
-        <div class="field"><span class="fl">Password</span>
-          <input name="password" type="password" placeholder="password" autocomplete="new-password" required>
-        </div>
-        <div class="field"><span class="fl">Role</span>
-          <select name="role">
-            <option value="operator">operator</option>
-            <option value="admin">admin</option>
-          </select>
-        </div>
-        <div class="field"><span class="fl"></span><button type="submit" class="primary">Add</button></div>
-      </form>
-      <p class="hint">Operators can run robots and manage accounts, but cannot open Settings or add/edit/delete robots.</p>
-    </section>
+        <form id="add-user-form">
+          <div class="field"><span class="fl">Username</span>
+            <input name="username" placeholder="username" autocomplete="off" required>
+          </div>
+          <div class="field"><span class="fl">Password</span>
+            <input name="password" type="password" placeholder="password" autocomplete="new-password" required>
+          </div>
+          <div class="field"><span class="fl">Role</span>
+            <select name="role">
+              <option value="operator">operator</option>
+              <option value="admin">admin</option>
+            </select>
+          </div>
+          <div class="field"><span class="fl">&nbsp;</span><button type="submit" class="primary">Add user</button></div>
+        </form>
+        <p class="hint">Operators cannot open Settings or add/edit/delete robots.</p>
+      </section>
 
-    <section class="panel">
-      <h2>Users</h2>
-      <table id="users-table">
-        <thead>
-          <tr><th>Username</th><th>Role</th><th>Actions</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
-  </main>
+      <section class="card panel">
+        <div class="panel-head">
+          <div>
+            <h2>Users</h2>
+            <p class="card-sub">Role changes take effect on the user&rsquo;s next action.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="users-table">
+            <thead>
+              <tr><th>Username</th><th>Role</th><th>Actions</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
 
-  <script src="{{ url_for('static', filename='common.js') }}"></script>
-  <script src="{{ url_for('static', filename='users.js') }}"></script>
+<script src="{{ url_for('static', filename='common.js') }}"></script>
+<script src="{{ url_for('static', filename='shell.js') }}"></script>
+<script src="{{ url_for('static', filename='users.js') }}"></script>
 </body>
 </html>

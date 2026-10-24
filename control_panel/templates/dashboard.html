@@ -3,180 +3,281 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Banking Control Panel</title>
+  <title>Dashboard - BCA Ops</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 {% set active = 'dashboard' %}
-  {% include '_header.html' %}
+{% set page_title = 'Dashboard' %}
+{% set page_sub = 'Start or stop the robot, watch the live feed, and jump the queue when an account is needed now.' %}
+{% from '_icons.html' import icon %}
+<div class="app" id="app">
+  {% include '_sidebar.html' %}
+  <div class="main">
+    {% include '_header.html' %}
 
-  <main data-refresh-ms="{{ refresh_ms }}">
-    <p id="status" class="status"></p>
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Robots</h2>
-        <button class="min-toggle" type="button" title="Minimize">−</button>
-      </div>
-      <table id="robots-table">
-        <thead>
-          <tr>
-            <th>Name</th><th>Address</th><th>Status</th><th>Running</th>
-            <th>PID</th><th>Proxy</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <details class="add-robot">
-        <summary>Add robot</summary>
-        <form id="add-robot-form">
-          <div class="field"><span class="fl">Name</span>
-            <input name="name" placeholder="name" required>
+    <main data-refresh-ms="{{ refresh_ms }}">
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <section class="kpi-grid" aria-label="Fleet summary">
+        <article class="card kpi">
+          <span class="kpi-icon">{{ icon('server') }}</span>
+          <div class="kpi-body">
+            <span class="kpi-label">Robots online</span>
+            <strong class="kpi-value" id="kpi-online">&ndash;</strong>
+            <span class="kpi-foot" id="kpi-online-foot">Waiting for telemetry&hellip;</span>
           </div>
-          <div class="field"><span class="fl">Host</span>
-            <input name="host" placeholder="host" required>
+        </article>
+        <article class="card kpi">
+          <span class="kpi-icon cyan">{{ icon('activity') }}</span>
+          <div class="kpi-body">
+            <span class="kpi-label">Active scraper</span>
+            <strong class="kpi-value" id="kpi-running">&ndash;</strong>
+            <span class="kpi-foot" id="kpi-running-foot">No scraper running</span>
           </div>
-          <div class="field"><span class="fl">Port</span>
-            <input name="port" type="number" placeholder="port" required>
+        </article>
+        <article class="card kpi">
+          <span class="kpi-icon violet">{{ icon('accounts') }}</span>
+          <div class="kpi-body">
+            <span class="kpi-label">Accounts tracked</span>
+            <strong class="kpi-value" id="kpi-accounts">&ndash;</strong>
+            <span class="kpi-foot" id="kpi-accounts-foot">Select a robot to load accounts</span>
           </div>
-          <div class="field"><span class="fl">Token</span>
-            <input name="token" placeholder="robot token">
+        </article>
+        <article class="card kpi">
+          <span class="kpi-icon green">{{ icon('zap') }}</span>
+          <div class="kpi-body">
+            <span class="kpi-label">Next in queue</span>
+            <strong class="kpi-value" id="kpi-next">&ndash;</strong>
+            <span class="kpi-foot" id="kpi-next-foot">Select a robot to see the queue</span>
           </div>
-          <div class="field"><span class="fl">Proxy</span>
-            <select name="proxy_id" class="proxy-select" title="proxy">
-              <option value="">proxy: none</option>
+        </article>
+      </section>
+
+      <section class="deck-grid" aria-label="Robot controls">
+        <article class="card deck-card">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title">Robot control <span class="selected-name" id="selected-name"></span></h2>
+              <p class="card-sub">Pick a robot, then start or stop the scraper.</p>
+            </div>
+            <span class="badge" id="deck-state">idle</span>
+          </div>
+
+          <label class="deck-select" for="robot-picker">
+            <span>Robot</span>
+            <select id="robot-picker" aria-label="Select a robot">
+              <option value="">Select a robot&hellip;</option>
             </select>
+          </label>
+
+          <div id="robot-controls" hidden>
+            <div id="selected-status" class="acc-status"></div>
+            <div class="deck-controls">
+              <label class="deck-select">
+                <span>Proxy</span>
+                <select id="proxy-select" class="proxy-select" title="proxy">
+                  <option value="auto">Auto (fastest proxy)</option>
+                </select>
+              </label>
+              <label class="deck-select">
+                <span>Account scope</span>
+                <select id="account-select">
+                  <option value="">all accounts</option>
+                  {% for bank in banks %}<option value="{{ bank }}">{{ bank }}</option>{% endfor %}
+                </select>
+              </label>
+            </div>
+            <div class="deck-actions">
+              <button id="start-btn" class="primary btn-lg" type="button">
+                {{ icon('play', 'sm') }} Start scraper
+              </button>
+              <button id="stop-btn" class="btn-lg" type="button">
+                {{ icon('stop', 'sm') }} Stop
+              </button>
+            </div>
           </div>
-          <div class="field"><span class="fl"></span><button type="submit">Add</button></div>
-        </form>
-      </details>
-    </section>
+          <p class="deck-hint">{{ icon('search', 'sm') }} Select a robot above to enable start and stop.</p>
+        </article>
 
-    <section class="panel" id="robot-controls" hidden>
-      <div class="panel-head">
-        <h2>Selected robot: <span id="selected-name"></span></h2>
-        <button class="min-toggle" type="button" title="Minimize">−</button>
-      </div>
-      <div id="selected-status" class="acc-status"></div>
-      <div class="controls">
-        <div class="field"><span class="fl">Proxy</span>
-          <select id="proxy-select" class="proxy-select" title="proxy">
-            <option value="auto">Auto (fastest proxy)</option>
-          </select>
+        <article class="card scrape-card">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title">Scrape an account now</h2>
+              <p class="card-sub">Jumps the queue once &mdash; the robot picks this account on its next step.</p>
+            </div>
+            <span class="kpi-icon cyan">{{ icon('zap') }}</span>
+          </div>
+          <div class="scrape-row">
+            <select id="next-account-select" aria-label="Account to scrape now">
+              <option value="">Select an account&hellip;</option>
+            </select>
+            <button id="next-account-btn" class="primary" type="button">
+              {{ icon('zap', 'sm') }} Scrape now
+            </button>
+          </div>
+          <p class="hint" id="scrape-hint">Select a robot to see its accounts.</p>
+        </article>
+      </section>
+
+      <section class="monitor-grid" aria-label="Live monitoring">
+        <article class="card panel" id="live-panel" hidden>
+          <div class="panel-head">
+            <div>
+              <h2 id="live-title">Live feed</h2>
+              <p class="card-sub">Current browser view of the selected robot.</p>
+            </div>
+            <span class="log-card-actions">
+              <button id="live-start" data-act="start" class="primary" type="button" title="Start scraping">Start</button>
+              <button id="live-stop" data-act="stop" type="button" title="Stop scraping">Stop</button>
+              <button id="live-zoom" class="live-zoom" type="button" title="Enlarge live view" aria-label="Enlarge live view">
+                {{ icon('maximize', 'sm') }}
+              </button>
+            </span>
+            <button class="min-toggle" type="button" title="Minimize">-</button>
+          </div>
+          <div class="live-frame" id="live-frame">
+            <img id="live-img" class="live-card-img" alt="live view" style="visibility:hidden">
+            <span class="live-placeholder">no footage</span>
+          </div>
+        </article>
+
+        <article class="card panel">
+          <div class="panel-head">
+            <div>
+              <h2 id="log-title">Log</h2>
+              <p class="card-sub">Live output from the scraper.</p>
+            </div>
+            <button class="min-toggle" type="button" title="Minimize">-</button>
+          </div>
+          <div class="log-toolbar">
+            <button id="log-refresh" type="button">Refresh</button>
+            <label>lines <input id="log-lines" type="number" value="200" min="1"></label>
+            <label><input id="log-auto" type="checkbox" checked> auto</label>
+          </div>
+          <pre id="log-pane" class="log-console">Select a robot to see its log.</pre>
+        </article>
+      </section>
+
+      <section class="card panel">
+        <div class="panel-head">
+          <div>
+            <h2 id="accounts-title">Accounts</h2>
+            <p class="card-sub">Press &ldquo;Scrape now&rdquo; on a row to jump the queue for that account.</p>
+          </div>
+          <button class="min-toggle" type="button" title="Minimize">-</button>
         </div>
-        <div class="field"><span class="fl">Account</span>
-          <select id="account-select">
-            <option value="">all</option>
-            {% for bank in banks %}<option value="{{ bank }}">{{ bank }}</option>{% endfor %}
-          </select>
+        <div class="table-wrap">
+          <table id="accounts-table">
+            <thead>
+              <tr>
+                <th>Label</th><th>Bank</th><th>Unique ID</th><th>Shortname</th><th>Enabled</th>
+                <th>Output</th><th>Last scrape</th><th>Omitted</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
-        <div class="field">
-          <span class="fl"></span>
-          <button id="start-btn" class="primary">Start</button>
-          <button id="stop-btn">Stop</button>
+        <p class="hint">The current account is highlighted green, the queued next account amber.</p>
+      </section>
+
+      <section class="card panel">
+        <div class="panel-head">
+          <div>
+            <h2>Fleet</h2>
+            <p class="card-sub">Registered robots and their connection state.</p>
+          </div>
+          <button class="min-toggle" type="button" title="Minimize">-</button>
         </div>
-      </div>
-    </section>
+        <div class="table-wrap">
+          <table id="robots-table">
+            <thead>
+              <tr>
+                <th>Name</th><th>Address</th><th>Status</th><th>Running</th>
+                <th>PID</th><th>Proxy</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <details class="add-robot">
+          <summary>Add robot</summary>
+          <form id="add-robot-form">
+            <div class="field"><span class="fl">Name</span>
+              <input name="name" placeholder="name" required>
+            </div>
+            <div class="field"><span class="fl">Host</span>
+              <input name="host" placeholder="host" required>
+            </div>
+            <div class="field"><span class="fl">Port</span>
+              <input name="port" type="number" placeholder="port" required>
+            </div>
+            <div class="field"><span class="fl">Token</span>
+              <input name="token" placeholder="robot token">
+            </div>
+            <div class="field"><span class="fl">Proxy</span>
+              <select name="proxy_id" class="proxy-select" title="proxy">
+                <option value="">proxy: none</option>
+              </select>
+            </div>
+            <div class="field"><span class="fl">&nbsp;</span><button type="submit" class="primary">Add robot</button></div>
+          </form>
+        </details>
+      </section>
+    </main>
+  </div>
+</div>
 
-    <section class="panel">
-      <div class="panel-head">
-        <h2 id="accounts-title">Accounts</h2>
-        <button class="min-toggle" type="button" title="Minimize">−</button>
-      </div>
-      <table id="accounts-table">
-        <thead>
-          <tr>
-            <th>Label</th><th>Bank</th><th>Unique ID</th><th>Shortname</th><th>Enabled</th>
-            <th>Output</th><th>Last scrape</th><th>Omitted</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
-
-    <section class="panel">
-      <div class="panel-head">
-        <h2 id="log-title">Log</h2>
-        <button class="min-toggle" type="button" title="Minimize">−</button>
-      </div>
-      <div class="log-toolbar">
-        <button id="log-refresh">Refresh</button>
-        <label>lines <input id="log-lines" type="number" value="200" min="1"></label>
-        <label><input id="log-auto" type="checkbox" checked> auto</label>
-      </div>
-      <pre id="log-pane"></pre>
-    </section>
-
-    <section class="panel" id="live-panel" hidden>
-      <div class="panel-head">
-        <h2 id="live-title">Live feed</h2>
-        <span class="log-card-actions">
-          <button id="live-start" data-act="start" class="primary" type="button" title="Start scraping">Start</button>
-          <button id="live-stop" data-act="stop" type="button" title="Stop scraping">Stop</button>
-          <button id="live-zoom" class="live-zoom" type="button" title="Enlarge live view" aria-label="Enlarge live view">
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 9V4h5M20 15v5h-5M15 4h5v5M9 20H4v-5"/></svg>
-          </button>
-        </span>
-        <button class="min-toggle" type="button" title="Minimize">−</button>
-      </div>
-      <div class="live-frame" id="live-frame">
-        <img id="live-img" class="live-card-img" alt="live view" style="visibility:hidden">
-        <span class="live-placeholder">no footage</span>
-      </div>
-    </section>
-  </main>
-
-  <dialog id="edit-dialog">
-    <form id="edit-form">
-      <h3>Edit robot</h3>
-      <input type="hidden" name="id">
-      <div class="field"><span class="fl">Name</span><input name="name"></div>
-      <div class="field"><span class="fl">Host</span><input name="host"></div>
-      <div class="field"><span class="fl">Port</span><input name="port" type="number"></div>
-      <div class="field"><span class="fl">Token</span><input name="token"></div>
-      <div class="field"><span class="fl">Proxy</span>
-        <select name="proxy_id" class="proxy-select">
-          <option value="">none</option>
-        </select>
-      </div>
-      <div class="dialog-actions">
-        <button type="submit">Save</button>
-        <button type="button" id="edit-cancel">Cancel</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="statement-dialog">
-    <div class="statement-head">
-      <h3>Statement</h3>
-      <div class="statement-actions">
-        <button id="statement-copy" class="icon-btn" type="button"
-                title="Copy statement" aria-label="Copy statement">
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"
-                  d="M9 9h10v10H9zM5 15V5h10"/>
-          </svg>
-        </button>
-        <button id="statement-close">&times;</button>
-      </div>
+<dialog id="edit-dialog">
+  <form id="edit-form">
+    <h3>Edit robot</h3>
+    <input type="hidden" name="id">
+    <div class="field"><span class="fl">Name</span><input name="name"></div>
+    <div class="field"><span class="fl">Host</span><input name="host"></div>
+    <div class="field"><span class="fl">Port</span><input name="port" type="number"></div>
+    <div class="field"><span class="fl">Token</span><input name="token"></div>
+    <div class="field"><span class="fl">Proxy</span>
+      <select name="proxy_id" class="proxy-select">
+        <option value="">none</option>
+      </select>
     </div>
-    <pre id="statement-body"></pre>
-  </dialog>
-
-  <dialog id="live-modal" class="live-modal">
-    <div class="live-modal-head">
-      <span id="live-modal-title" class="live-modal-title"></span>
-      <span class="log-card-actions">
-        <button type="button" class="primary" data-act="start" title="Start scraping">Start</button>
-        <button type="button" data-act="stop" title="Stop scraping">Stop</button>
-      </span>
-      <span class="log-card-status"></span>
-      <button type="button" id="live-modal-close" class="live-modal-close"
-              aria-label="Close enlarged view" title="Close">&times;</button>
+    <div class="dialog-actions">
+      <button type="submit" class="primary">Save changes</button>
+      <button type="button" id="edit-cancel">Cancel</button>
     </div>
-    <img id="live-modal-img" alt="enlarged live view">
-  </dialog>
+  </form>
+</dialog>
 
-  <script src="{{ url_for('static', filename='common.js') }}"></script>
-  <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+<dialog id="statement-dialog">
+  <div class="statement-head">
+    <h3>Statement</h3>
+    <div class="statement-actions">
+      <button id="statement-copy" class="icon-btn" type="button"
+              title="Copy statement" aria-label="Copy statement">
+        {{ icon('copy', 'sm') }}
+      </button>
+      <button id="statement-close" type="button" aria-label="Close statement">&times;</button>
+    </div>
+  </div>
+  <pre id="statement-body"></pre>
+</dialog>
+
+<dialog id="live-modal" class="live-modal">
+  <div class="live-modal-head">
+    <span id="live-modal-title" class="live-modal-title"></span>
+    <span class="log-card-actions">
+      <button type="button" class="primary" data-act="start" title="Start scraping">Start</button>
+      <button type="button" data-act="stop" title="Stop scraping">Stop</button>
+    </span>
+    <span class="log-card-status"></span>
+    <button type="button" id="live-modal-close" class="live-modal-close"
+            aria-label="Close enlarged view" title="Close">&times;</button>
+  </div>
+  <img id="live-modal-img" alt="enlarged live view">
+</dialog>
+
+<script src="{{ url_for('static', filename='common.js') }}"></script>
+<script src="{{ url_for('static', filename='shell.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard.js') }}"></script>
 </body>
 </html>

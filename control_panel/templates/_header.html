@@ -1,17 +1,33 @@
+{% from '_icons.html' import icon %}
   <header class="topbar">
-    <h1>Banking Control Panel</h1>
-    <nav class="nav">
-      <a href="{{ url_for('dashboard') }}" class="{{ 'active' if active == 'dashboard' else '' }}">Dashboard</a>
-      <a href="{{ url_for('accounts_page') }}" class="{{ 'active' if active == 'accounts' else '' }}">Accounts</a>
-      <a href="{{ url_for('logs_page') }}" class="{{ 'active' if active == 'logs' else '' }}">Live Logs</a>
-      <a href="{{ url_for('live_page') }}" class="{{ 'active' if active == 'live' else '' }}">Live</a>
-      <a href="{{ url_for('proxies_page') }}" class="{{ 'active' if active == 'proxies' else '' }}">Proxies</a>
-      {% if user and user.role == 'admin' %}
-      <a href="{{ url_for('settings_page') }}" class="{{ 'active' if active == 'settings' else '' }}">Settings</a>
-      <a href="{{ url_for('users_page') }}" class="{{ 'active' if active == 'users' else '' }}">Users</a>
+    <button class="icon-btn menu-toggle" id="menu-toggle" type="button"
+            title="Open menu" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">
+      {{ icon('menu', 'sm') }}
+    </button>
+
+    <div class="page-heading">
+      <div class="crumb">Control panel <span>/</span> <b>{{ page_title or 'Dashboard' }}</b></div>
+      <h1>{{ page_title or 'Dashboard' }}</h1>
+      {% if page_sub %}<p>{{ page_sub }}</p>{% endif %}
+    </div>
+
+    <div class="top-actions">
+      <span class="top-clock" id="top-clock" title="Local time">
+        {{ icon('clock', 'sm') }}<span>--:--</span>
+      </span>
+      <button class="icon-btn" id="page-refresh" type="button" title="Refresh this page" aria-label="Refresh this page">
+        {{ icon('refresh', 'sm') }}
+      </button>
+      {% if user and user.role %}
+      <span class="role-chip role-{{ user.role }}">{{ user.role }}</span>
       {% endif %}
-    </nav>
-    <span class="user">signed in as <b>{{ user.username if user else '' }}</b>{% if user and user.role %} <span class="role role-{{ user.role }}">{{ user.role }}</span>{% endif %}</span>
-    <a class="logout" href="{{ url_for('logout') }}">Log out</a>
+      <span class="top-user">
+        <span class="avatar" aria-hidden="true">{{ (user.username[:2] if user else 'OP')|upper }}</span>
+        <span class="top-user-meta">
+          <b>{{ user.username if user else 'operator' }}</b>
+          <small>{{ (user.role if user and user.role else 'operator')|upper }}</small>
+        </span>
+      </span>
+    </div>
   </header>
   <script>window.PANEL_ROLE = {{ (user.role if user else '')|tojson }}; window.PANEL_USER_ID = {{ (user.id if user else '')|tojson }};</script>

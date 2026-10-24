@@ -1,0 +1,72 @@
+{% from '_icons.html' import icon %}
+<aside class="sidebar" id="sidebar" aria-label="Main navigation">
+  <div class="side-brand">
+    <a class="brand-mark" href="{{ url_for('dashboard') }}" aria-label="BCA Ops dashboard">
+      {{ icon('brand', 'lg') }}
+    </a>
+    <span class="brand-text">
+      <b>BCA Ops</b>
+      <small>Robot Control</small>
+    </span>
+    <button class="side-collapse" id="sidebar-collapse" type="button"
+            title="Collapse sidebar" aria-label="Collapse sidebar" aria-expanded="true">
+      {{ icon('chevron-left', 'sm') }}
+    </button>
+  </div>
+
+  <nav class="side-nav">
+    <span class="nav-group">Main</span>
+    <a href="{{ url_for('dashboard') }}" class="{{ 'active' if active == 'dashboard' else '' }}"
+       title="Dashboard" {% if active == 'dashboard' %}aria-current="page"{% endif %}>
+      {{ icon('dashboard') }}<span>Dashboard</span>
+    </a>
+    <a href="{{ url_for('accounts_page') }}" class="{{ 'active' if active == 'accounts' else '' }}"
+       title="Accounts" {% if active == 'accounts' %}aria-current="page"{% endif %}>
+      {{ icon('accounts') }}<span>Accounts</span>
+    </a>
+    <a href="{{ url_for('logs_page') }}" class="{{ 'active' if active == 'logs' else '' }}"
+       title="Live Logs" {% if active == 'logs' %}aria-current="page"{% endif %}>
+      {{ icon('logs') }}<span>Live Logs</span>
+    </a>
+
+    <span class="nav-group">Monitoring</span>
+    <a href="{{ url_for('live_page') }}" class="{{ 'active' if active == 'live' else '' }}"
+       title="Live View" {% if active == 'live' %}aria-current="page"{% endif %}>
+      {{ icon('live') }}<span>Live View</span>
+    </a>
+    <a href="{{ url_for('proxies_page') }}" class="{{ 'active' if active == 'proxies' else '' }}"
+       title="Proxies" {% if active == 'proxies' %}aria-current="page"{% endif %}>
+      {{ icon('proxies') }}<span>Proxies</span>
+    </a>
+
+    {% if user and user.role == 'admin' %}
+    <span class="nav-group">Admin</span>
+    <a href="{{ url_for('settings_page') }}" class="{{ 'active' if active == 'settings' else '' }}"
+       title="Settings" {% if active == 'settings' %}aria-current="page"{% endif %}>
+      {{ icon('settings') }}<span>Settings</span>
+    </a>
+    <a href="{{ url_for('users_page') }}" class="{{ 'active' if active == 'users' else '' }}"
+       title="Users" {% if active == 'users' %}aria-current="page"{% endif %}>
+      {{ icon('users') }}<span>Users</span>
+    </a>
+    {% endif %}
+  </nav>
+
+  <div class="side-foot">
+    <div class="side-live" title="Control panel is reachable">
+      <span class="dot" aria-hidden="true"></span>
+      <span>Panel online</span>
+    </div>
+    <div class="side-user">
+      <span class="avatar" aria-hidden="true">{{ (user.username[:2] if user else 'OP')|upper }}</span>
+      <span class="side-user-meta">
+        <b>{{ user.username if user else 'operator' }}</b>
+        <small>{{ (user.role if user and user.role else 'operator')|upper }}</small>
+      </span>
+      <a class="side-logout" href="{{ url_for('logout') }}" title="Log out" aria-label="Log out">
+        {{ icon('logout', 'sm') }}
+      </a>
+    </div>
+  </div>
+</aside>
+<div class="sidebar-scrim" id="sidebar-scrim" hidden></div>

@@ -3,19 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Banking Control Panel - Settings</title>
+  <title>Settings - BCA Ops</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 {% set active = 'settings' %}
-  {% include '_header.html' %}
+{% set page_title = 'Settings' %}
+{% set page_sub = 'Per-robot scraper configuration. Changes apply the next time the robot starts.' %}
+<div class="app" id="app">
+  {% include '_sidebar.html' %}
+  <div class="main">
+    {% include '_header.html' %}
 
-  <main>
-    <p id="status" class="status"></p>
-    <div id="settings-container"></div>
-  </main>
+    <main>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <div id="settings-container"></div>
+    </main>
+  </div>
+</div>
 
-  <script src="{{ url_for('static', filename='common.js') }}"></script>
-  <script src="{{ url_for('static', filename='settings.js') }}"></script>
+<script src="{{ url_for('static', filename='common.js') }}"></script>
+<script src="{{ url_for('static', filename='shell.js') }}"></script>
+<script src="{{ url_for('static', filename='settings.js') }}"></script>
 </body>
 </html>

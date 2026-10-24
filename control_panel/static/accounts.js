@@ -51,7 +51,7 @@ function renderAccounts(accounts) {
       <td>${a.output_exists === null ? "-" : a.output_exists ? "yes" : "no"}</td>
       <td>${esc(last)}</td>
       <td>
-        <button data-act="next" data-id="${a.robot_id}" data-label="${esc(a.label)}">Jump Next</button>
+        <button data-act="next" data-id="${a.robot_id}" data-label="${esc(a.label)}" title="Scrape this account next (one time)">Scrape now</button>
         <button data-act="view" data-id="${a.robot_id}" data-label="${esc(a.label)}" data-bank="${esc(a.bank || "")}">View</button>
         <button data-act="edit" data-id="${a.robot_id}" data-label="${esc(a.label)}" data-bank="${esc(a.bank || "")}" data-uid="${esc(a.unique_id ?? "")}" data-short="${esc(a.bank_shortname ?? "")}">Edit</button>
         ${toggleBtn}

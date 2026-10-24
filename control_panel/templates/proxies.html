@@ -3,66 +3,90 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Banking Control Panel - Proxies</title>
+  <title>Proxies - BCA Ops</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 {% set active = 'proxies' %}
-  {% include '_header.html' %}
+{% set page_title = 'Proxies' %}
+{% set page_sub = 'Register proxies and measure robot-to-bank latency before a scrape run.' %}
+<div class="app" id="app">
+  {% include '_sidebar.html' %}
+  <div class="main">
+    {% include '_header.html' %}
 
-  <main>
-    <p id="status" class="status"></p>
+    <main>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
 
-    {% if user and user.role == 'admin' %}
-    <section class="panel">
-      <h2>Add proxy</h2>
-      <form id="add-proxy-form" class="add-account">
-        <div class="field"><span class="fl">IP / Host</span>
-          <input name="ip" placeholder="proxy ip / host" required>
+      {% if user and user.role == 'admin' %}
+      <section class="card panel">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">Add proxy</h2>
+            <p class="card-sub">Proxies here can be selected when adding or editing a robot.</p>
+          </div>
         </div>
-        <div class="field"><span class="fl">Port</span>
-          <input name="port" type="number" placeholder="proxy port" required>
-        </div>
-        <div class="field"><span class="fl">Note</span>
-          <input name="note" placeholder="note (optional)">
-        </div>
-        <div class="field"><span class="fl"></span><button type="submit" class="primary">Add</button></div>
-      </form>
-      <p class="hint">Proxies here can be selected when adding or editing a robot.</p>
-    </section>
-    {% endif %}
+        <form id="add-proxy-form" class="add-account">
+          <div class="field"><span class="fl">IP / Host</span>
+            <input name="ip" placeholder="proxy ip / host" required>
+          </div>
+          <div class="field"><span class="fl">Port</span>
+            <input name="port" type="number" placeholder="proxy port" required>
+          </div>
+          <div class="field"><span class="fl">Note</span>
+            <input name="note" placeholder="note (optional)">
+          </div>
+          <div class="field"><span class="fl">&nbsp;</span><button type="submit" class="primary">Add proxy</button></div>
+        </form>
+      </section>
+      {% endif %}
 
-    <section class="panel">
-      <h2>Test connection</h2>
-      <div class="controls">
-        <div class="field"><span class="fl">Robot</span>
-          <select id="test-robot"></select>
+      <section class="card panel">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">Test connection</h2>
+            <p class="card-sub">Measures robot &rarr; proxy &rarr; bank login latency in milliseconds.</p>
+          </div>
         </div>
-        <div class="field">
-          <span class="fl"></span>
-          <button id="test-run" class="primary" type="button">Test Connection</button>
+        <div class="controls">
+          <div class="field"><span class="fl">Robot</span>
+            <select id="test-robot"></select>
+          </div>
+          <div class="field"><span class="fl">&nbsp;</span>
+            <button id="test-run" class="primary" type="button">Test connection</button>
+          </div>
         </div>
-      </div>
-      <p class="hint">Measures robot → proxy → bank login latency in milliseconds.
-        Green = within the slow threshold, red = slow, unreachable or timed out.</p>
-      <table id="test-results" hidden>
-        <thead></thead>
-        <tbody></tbody>
-      </table>
-    </section>
+        <p class="hint">Green = within the slow threshold, red = slow, unreachable or timed out.</p>
+        <div class="table-wrap">
+          <table id="test-results" hidden>
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
 
-    <section class="panel">
-      <h2>Proxy list</h2>
-      <table id="proxies-table">
-        <thead>
-          <tr><th>IP</th><th>Port</th><th>Note</th><th>Actions</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
-  </main>
+      <section class="card panel">
+        <div class="panel-head">
+          <div>
+            <h2>Proxy list</h2>
+            <p class="card-sub">Every proxy available to the fleet.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="proxies-table">
+            <thead>
+              <tr><th>IP</th><th>Port</th><th>Note</th><th>Actions</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
 
-  <script src="{{ url_for('static', filename='common.js') }}"></script>
-  <script src="{{ url_for('static', filename='proxies.js') }}"></script>
+<script src="{{ url_for('static', filename='common.js') }}"></script>
+<script src="{{ url_for('static', filename='shell.js') }}"></script>
+<script src="{{ url_for('static', filename='proxies.js') }}"></script>
 </body>
 </html>

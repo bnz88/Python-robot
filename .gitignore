@@ -10,3 +10,4 @@ dataset/permata/misses/
 .venv/
 run_robot.cmd
 run_panel.cmd
+graphify-out/

@@ -947,12 +947,19 @@ td.cell-empty {
 }
 
 /* -------------------------------------------------------- dashboard: feed -- */
-.monitor-grid { display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px; align-items: start; }
-.monitor-grid > .card { min-width: 0; }
-#live-panel .panel-head { margin-bottom: 12px; }
-#live-panel .live-frame { width: 100%; max-width: none; margin: 0; }
-#live-panel .live-frame img { max-height: 380px; }
-#live-panel .panel-head h2 { font-size: 14.5px; }
+.monitor-grid { display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px; align-items: stretch; }
+.monitor-grid > .card { min-width: 0; display: flex; flex-direction: column; }
+#live-panel .live-frame {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  aspect-ratio: auto;
+  flex: 1 1 auto;
+  min-height: 300px;
+}
+#live-panel .live-frame img { height: 100%; max-height: none; }
+.monitor-grid .log-toolbar { flex: 0 0 auto; min-height: 40px; }
+.live-toolbar { justify-content: flex-start; }
 
 .log-toolbar {
   display: flex;
@@ -970,7 +977,8 @@ td.cell-empty {
   margin: 0;
   padding: 14px 16px;
   min-height: 220px;
-  max-height: 360px;
+  max-height: 420px;
+  flex: 1 1 auto;
   overflow: auto;
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-md);
@@ -1265,6 +1273,7 @@ dialog h3 { font-size: 16px; margin-bottom: 4px; }
 #test-results { margin-top: 14px; }
 #test-results td.cell-ok { color: var(--ok); font-weight: 600; font-variant-numeric: tabular-nums; }
 #test-results td.cell-bad { color: var(--bad); font-weight: 600; font-variant-numeric: tabular-nums; }
+.proxy-note { margin-left: 8px; color: var(--muted-2); font-size: 11px; font-weight: 400; }
 #test-robot { min-width: 260px; }
 
 /* ----------------------------------------------------------------- users -- */
@@ -1328,6 +1337,9 @@ dialog h3 { font-size: 16px; margin-bottom: 4px; }
   .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .deck-grid { grid-template-columns: 1fr 1fr; }
   .monitor-grid { grid-template-columns: 1fr; }
+  #live-panel .live-frame { aspect-ratio: 16 / 10; flex: none; min-height: 0; }
+  #live-panel .live-frame img { height: auto; max-height: 380px; }
+  .log-console { flex: none; max-height: 360px; }
 }
 
 @media (max-width: 1024px) {

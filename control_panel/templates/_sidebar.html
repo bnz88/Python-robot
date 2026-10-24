@@ -21,9 +21,9 @@
       {{ icon('dashboard') }}<span>Dashboard</span>
     </a>
     {% if user and user.role == 'admin' %}
-    <a href="{{ url_for('fleet_page') }}" class="{{ 'active' if active == 'fleet' else '' }}"
-       title="Fleet" {% if active == 'fleet' %}aria-current="page"{% endif %}>
-      {{ icon('server') }}<span>Fleet</span>
+    <a href="{{ url_for('robot_page') }}" class="{{ 'active' if active == 'robot' else '' }}"
+       title="Robot" {% if active == 'robot' %}aria-current="page"{% endif %}>
+      {{ icon('server') }}<span>Robot</span>
     </a>
     {% endif %}
     <a href="{{ url_for('accounts_page') }}" class="{{ 'active' if active == 'accounts' else '' }}"

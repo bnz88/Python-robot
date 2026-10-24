@@ -272,10 +272,10 @@ def dashboard():
     )
 
 
-@app.route("/fleet")
+@app.route("/robot")
 @auth.admin_required
-def fleet_page():
-    return render_template("fleet.html")
+def robot_page():
+    return render_template("robot.html")
 
 
 @app.route("/accounts")
@@ -819,6 +819,13 @@ def api_proxy_test():
         return _json_error("invalid response from robot", 502)
     if body.get("error"):
         return _json_error(body["error"], 400)
+    notes = {
+        "{}:{}".format(p["ip"], p["port"]): (p.get("note") or "")
+        for p in proxies
+    }
+    for row in body.get("proxies") or []:
+        if isinstance(row, dict):
+            row["note"] = notes.get(row.get("host"), "")
     return jsonify(body)
 
 

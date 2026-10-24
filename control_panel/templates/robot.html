@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fleet - BCA Ops</title>
+  <title>Robot - BCA Ops</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-{% set active = 'fleet' %}
-{% set page_title = 'Fleet' %}
+{% set active = 'robot' %}
+{% set page_title = 'Robot' %}
 {% set page_sub = 'Register robots, check their connection state, and start or stop each one.' %}
 <div class="app" id="app">
   {% include '_sidebar.html' %}
@@ -87,6 +87,6 @@
 
 <script src="{{ url_for('static', filename='common.js') }}"></script>
 <script src="{{ url_for('static', filename='shell.js') }}"></script>
-<script src="{{ url_for('static', filename='fleet.js') }}"></script>
+<script src="{{ url_for('static', filename='robot.js') }}"></script>
 </body>
 </html>

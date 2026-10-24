@@ -67,7 +67,9 @@ function renderResults(data) {
         return `<td class="${good ? "cell-ok" : "cell-bad"}">${esc(text)}</td>`;
       })
       .join("");
-    tr.innerHTML = `<td>${esc(proxy.host)}</td>${cells}`;
+    tr.innerHTML = `<td>${esc(proxy.host)}${
+      proxy.note ? `<span class="proxy-note">${esc(proxy.note)}</span>` : ""
+    }</td>${cells}`;
     tbody.appendChild(tr);
   }
   table.hidden = false;

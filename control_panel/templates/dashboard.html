@@ -19,7 +19,7 @@
     <main data-refresh-ms="{{ refresh_ms }}">
       <p id="status" class="status" role="status" aria-live="polite"></p>
 
-      <section class="kpi-grid" aria-label="Fleet summary">
+      <section class="kpi-grid" aria-label="Robot summary">
         <article class="card kpi">
           <span class="kpi-icon">{{ icon('server') }}</span>
           <div class="kpi-body">
@@ -127,6 +127,9 @@
               <h2 id="live-title">Live feed</h2>
               <p class="card-sub">Current browser view of the selected robot.</p>
             </div>
+            <button class="min-toggle" type="button" title="Minimize">-</button>
+          </div>
+          <div class="log-toolbar live-toolbar">
             <span class="log-card-actions">
               <button id="live-start" data-act="start" class="primary" type="button" title="Start scraping">Start</button>
               <button id="live-stop" data-act="stop" type="button" title="Stop scraping">Stop</button>
@@ -134,7 +137,6 @@
                 {{ icon('maximize', 'sm') }}
               </button>
             </span>
-            <button class="min-toggle" type="button" title="Minimize">-</button>
           </div>
           <div class="live-frame" id="live-frame">
             <img id="live-img" class="live-card-img" alt="live view" style="visibility:hidden">
@@ -179,6 +181,31 @@
           </table>
         </div>
         <p class="hint">The current account is highlighted green, the queued next account amber.</p>
+      </section>
+
+      <section class="card panel">
+        <div class="panel-head">
+          <div>
+            <h2>Test connection</h2>
+            <p class="card-sub">Measures robot &rarr; proxy &rarr; bank login latency in milliseconds.</p>
+          </div>
+          <button class="min-toggle" type="button" title="Minimize">-</button>
+        </div>
+        <div class="controls">
+          <div class="field"><span class="fl">Robot</span>
+            <select id="test-robot"></select>
+          </div>
+          <div class="field"><span class="fl">&nbsp;</span>
+            <button id="test-run" class="primary" type="button">Test connection</button>
+          </div>
+        </div>
+        <p class="hint">Green = within the slow threshold, red = slow, unreachable or timed out.</p>
+        <div class="table-wrap">
+          <table id="test-results" hidden>
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </section>
     </main>
   </div>

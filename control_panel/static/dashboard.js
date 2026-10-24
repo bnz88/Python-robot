@@ -26,6 +26,7 @@ async function loadRobots() {
   renderRobotPicker();
   updateSelectedMeta();
   updateDeckState();
+  renderTestRobotOptions();
   if (state.selectedId) await refreshSelected();
   else renderKpis();
   refreshLive();
@@ -291,6 +292,8 @@ async function selectRobot(id) {
   $("#log-title").textContent = "Log - " + r.name;
   const picker = $("#robot-picker");
   if (picker) picker.value = String(id);
+  const testSelect = $("#test-robot");
+  if (testSelect) testSelect.value = String(id);
   updateSelectedMeta();
   updateDeckState();
   await refreshSelected();
@@ -522,6 +525,83 @@ async function loadProxyOptions() {
   sel.value = keep && present ? keep : "auto";
 }
 
+function renderTestRobotOptions() {
+  const select = $("#test-robot");
+  if (!select) return;
+  const keep = select.value;
+  const html = state.robots
+    .map(
+      (r) =>
+        `<option value="${r.id}">${esc(r.name)} (${esc(r.host)}:${esc(String(r.port))})${r.online ? "" : " - offline"}</option>`
+    )
+    .join("");
+  if (select.dataset.signature !== html) {
+    select.innerHTML = html;
+    select.dataset.signature = html;
+  }
+  const preferred =
+    keep || (state.selectedId == null ? "" : String(state.selectedId));
+  const present = Array.from(select.options).some((o) => o.value === preferred);
+  select.value = present ? preferred : select.options[0] ? select.options[0].value : "";
+  const button = $("#test-run");
+  if (button) button.disabled = state.robots.length === 0;
+}
+
+function renderTestResults(data) {
+  const table = $("#test-results");
+  if (!table) return;
+  const thead = table.querySelector("thead");
+  const tbody = table.querySelector("tbody");
+  const banks = data.banks || [];
+  thead.innerHTML = `<tr><th>Proxy</th>${banks
+    .map((b) => `<th>${esc(b.label)}</th>`)
+    .join("")}</tr>`;
+  tbody.innerHTML = "";
+  for (const proxy of data.proxies || []) {
+    const tr = document.createElement("tr");
+    const cells = banks
+      .map((bank) => {
+        const cell = (proxy.results || {})[bank.key] || {
+          ok: false,
+          error: "no result",
+        };
+        const good = cell.ok && !cell.slow;
+        const text = cell.ok ? `${cell.latency_ms} ms` : cell.error || "failed";
+        return `<td class="${good ? "cell-ok" : "cell-bad"}">${esc(text)}</td>`;
+      })
+      .join("");
+    tr.innerHTML = `<td>${esc(proxy.host)}${
+      proxy.note ? `<span class="proxy-note">${esc(proxy.note)}</span>` : ""
+    }</td>${cells}`;
+    tbody.appendChild(tr);
+  }
+  table.hidden = false;
+}
+
+async function runProxyTest() {
+  const robotId = $("#test-robot").value;
+  if (!robotId) {
+    setStatus("Add a robot first.", true);
+    return;
+  }
+  const button = $("#test-run");
+  button.disabled = true;
+  setStatus("Testing proxies - this can take a few seconds...");
+  try {
+    const data = await post("/api/proxies/test", { robot_id: robotId });
+    if (data && data.error) {
+      setStatus(data.error, true);
+      return;
+    }
+    renderTestResults(data);
+    setStatus(`Test finished (slow above ${data.threshold_ms} ms).`);
+  } catch (err) {
+    setStatus(err.message, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function onAccountAction(e) {
   const btn = e.target.closest("button[data-act]");
   if (!btn) return;
@@ -586,6 +666,7 @@ function init() {
   $("#statement-close").addEventListener("click", () => $("#statement-dialog").close());
   $("#statement-copy").addEventListener("click", copyStatement);
   wireLiveFeed();
+  $("#test-run").addEventListener("click", runProxyTest);
 
   const robotPicker = $("#robot-picker");
   if (robotPicker) {

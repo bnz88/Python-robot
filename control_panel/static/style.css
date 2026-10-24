@@ -370,6 +370,7 @@ td.label-cell {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
 /*User page*/
 #add-user-form {gap: 8px; display: flex; flex-direction: column;}
 

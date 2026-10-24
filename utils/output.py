@@ -33,13 +33,25 @@ def configure_log_file(path):
 
 
 def log(msg):
-    """Print a timestamped message, flushing immediately; tee to file if set."""
+    """Print a timestamped message, flushing immediately; tee to file if set.
+
+    Logging must never raise. The console this process was started from can go
+    away (window closed, RDP session detached, parent pipe closed), after which
+    ``print`` raises OSError/ValueError. The HTTP API logs every request while
+    building the response, so an exception here used to close the connection
+    without replying and the panel reported a running robot as offline.
+    """
     stamp = time.strftime("%H:%M:%S")
     line = "[{}] {}".format(stamp, msg)
     try:
         print(line, flush=True)
     except UnicodeEncodeError:
-        print(line.encode("ascii", "replace").decode("ascii"), flush=True)
+        try:
+            print(line.encode("ascii", "replace").decode("ascii"), flush=True)
+        except Exception:
+            pass
+    except Exception:
+        pass
     if _log_file:
         try:
             with open(_log_file, "a", encoding="utf-8", errors="replace") as f:

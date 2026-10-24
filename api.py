@@ -1197,16 +1197,65 @@ class StatementHandler(BaseHTTPRequestHandler):
         log("[api] 404 {} ({})".format(self.path, reason))
 
     def log_message(self, fmt, *args):
-        log("[api] " + (fmt % args))
+        # BaseHTTPRequestHandler calls this from send_response(), i.e. before a
+        # single byte of the reply is written. Logging must therefore never
+        # raise here, or the client sees a connection closed with no response.
+        try:
+            log("[api] " + (fmt % args))
+        except Exception:
+            pass
+
+
+def acquire_instance_lock(path):
+    """Take an exclusive OS lock so only one robot API runs per repo.
+
+    Windows lets a second server bind the same port when SO_REUSEADDR is set,
+    which left stale ``api.py`` processes answering (or failing to answer)
+    requests on port 8000. Returns an open handle that holds the lock, or None
+    when another instance already owns it.
+    """
+    try:
+        directory = os.path.dirname(path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        handle = open(path, "a+")
+    except OSError:
+        return None
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return None
+    return handle
 
 
 def main():
     config = load_config()
     host = config.get("api_host", "127.0.0.1")
     port = int(config.get("api_port", 8000))
+    lock = acquire_instance_lock(os.path.join(BASE_DIR, "output", "api.lock"))
+    if lock is None:
+        log(
+            "[api] another robot API already owns output/api.lock - exiting so it "
+            "keeps serving. Stop the other robot console/task first."
+        )
+        return 1
     StatementHandler.config = config
     StatementHandler.manager = ProcessManager(BASE_DIR, config)
-    server = ThreadingHTTPServer((host, port), StatementHandler)
+    try:
+        server = ThreadingHTTPServer((host, port), StatementHandler)
+    except OSError as exc:
+        log("[api] cannot listen on {}:{} ({}). Is another robot API running?".format(host, port, exc))
+        lock.close()
+        return 1
     log("robot API listening on http://{}:{}/".format(host, port))
     log("routes: /health, /<bank>/<label>, /accounts, /config, /control/start|stop|status|log|test_connections")
     try:
@@ -1216,7 +1265,12 @@ def main():
         StatementHandler.manager.stop()
     finally:
         server.server_close()
+        try:
+            lock.close()
+        except OSError:
+            pass
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

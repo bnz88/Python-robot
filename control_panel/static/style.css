@@ -759,6 +759,12 @@ tr.selected:hover td { background: rgba(59, 130, 246, 0.19); }
 #robots-table { min-width: 780px; }
 #accounts-table { min-width: 980px; }
 td.label-cell { white-space: nowrap; vertical-align: middle; }
+td.cell-empty {
+  padding: 30px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12.5px;
+}
 .accounts-table td, .accounts-table th { padding: 8px 6px; }
 .omitted-input { width: 84px; height: 32px; }
 

@@ -180,73 +180,9 @@
         </div>
         <p class="hint">The current account is highlighted green, the queued next account amber.</p>
       </section>
-
-      <section class="card panel">
-        <div class="panel-head">
-          <div>
-            <h2>Fleet</h2>
-            <p class="card-sub">Registered robots and their connection state.</p>
-          </div>
-          <button class="min-toggle" type="button" title="Minimize">-</button>
-        </div>
-        <div class="table-wrap">
-          <table id="robots-table">
-            <thead>
-              <tr>
-                <th>Name</th><th>Address</th><th>Status</th><th>Running</th>
-                <th>PID</th><th>Proxy</th><th>Actions</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <details class="add-robot">
-          <summary>Add robot</summary>
-          <form id="add-robot-form">
-            <div class="field"><span class="fl">Name</span>
-              <input name="name" placeholder="name" required>
-            </div>
-            <div class="field"><span class="fl">Host</span>
-              <input name="host" placeholder="host" required>
-            </div>
-            <div class="field"><span class="fl">Port</span>
-              <input name="port" type="number" placeholder="port" required>
-            </div>
-            <div class="field"><span class="fl">Token</span>
-              <input name="token" placeholder="robot token">
-            </div>
-            <div class="field"><span class="fl">Proxy</span>
-              <select name="proxy_id" class="proxy-select" title="proxy">
-                <option value="">proxy: none</option>
-              </select>
-            </div>
-            <div class="field"><span class="fl">&nbsp;</span><button type="submit" class="primary">Add robot</button></div>
-          </form>
-        </details>
-      </section>
     </main>
   </div>
 </div>
-
-<dialog id="edit-dialog">
-  <form id="edit-form">
-    <h3>Edit robot</h3>
-    <input type="hidden" name="id">
-    <div class="field"><span class="fl">Name</span><input name="name"></div>
-    <div class="field"><span class="fl">Host</span><input name="host"></div>
-    <div class="field"><span class="fl">Port</span><input name="port" type="number"></div>
-    <div class="field"><span class="fl">Token</span><input name="token"></div>
-    <div class="field"><span class="fl">Proxy</span>
-      <select name="proxy_id" class="proxy-select">
-        <option value="">none</option>
-      </select>
-    </div>
-    <div class="dialog-actions">
-      <button type="submit" class="primary">Save changes</button>
-      <button type="button" id="edit-cancel">Cancel</button>
-    </div>
-  </form>
-</dialog>
 
 <dialog id="statement-dialog">
   <div class="statement-head">

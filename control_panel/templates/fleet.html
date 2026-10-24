@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fleet - BCA Ops</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+{% set active = 'fleet' %}
+{% set page_title = 'Fleet' %}
+{% set page_sub = 'Register robots, check their connection state, and start or stop each one.' %}
+<div class="app" id="app">
+  {% include '_sidebar.html' %}
+  <div class="main">
+    {% include '_header.html' %}
+
+    <main>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <section class="card panel">
+        <div class="panel-head">
+          <div>
+            <h2>Registered robots</h2>
+            <p class="card-sub">Start uses the fastest proxy per account; stop asks the robot to wind down.</p>
+          </div>
+          <button class="min-toggle" type="button" title="Minimize">-</button>
+        </div>
+        <div class="table-wrap">
+          <table id="robots-table">
+            <thead>
+              <tr>
+                <th>Name</th><th>Address</th><th>Status</th><th>Running</th>
+                <th>PID</th><th>Proxy</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <details class="add-robot">
+          <summary>Add robot</summary>
+          <form id="add-robot-form">
+            <div class="field"><span class="fl">Name</span>
+              <input name="name" placeholder="name" required>
+            </div>
+            <div class="field"><span class="fl">Host</span>
+              <input name="host" placeholder="host" required>
+            </div>
+            <div class="field"><span class="fl">Port</span>
+              <input name="port" type="number" placeholder="port" required>
+            </div>
+            <div class="field"><span class="fl">Token</span>
+              <input name="token" placeholder="robot token">
+            </div>
+            <div class="field"><span class="fl">Proxy</span>
+              <select name="proxy_id" class="proxy-select" title="proxy">
+                <option value="">proxy: none</option>
+              </select>
+            </div>
+            <div class="field"><span class="fl">&nbsp;</span><button type="submit" class="primary">Add robot</button></div>
+          </form>
+        </details>
+      </section>
+    </main>
+  </div>
+</div>
+
+<dialog id="edit-dialog">
+  <form id="edit-form">
+    <h3>Edit robot</h3>
+    <input type="hidden" name="id">
+    <div class="field"><span class="fl">Name</span><input name="name"></div>
+    <div class="field"><span class="fl">Host</span><input name="host"></div>
+    <div class="field"><span class="fl">Port</span><input name="port" type="number"></div>
+    <div class="field"><span class="fl">Token</span><input name="token"></div>
+    <div class="field"><span class="fl">Proxy</span>
+      <select name="proxy_id" class="proxy-select">
+        <option value="">none</option>
+      </select>
+    </div>
+    <div class="dialog-actions">
+      <button type="submit" class="primary">Save changes</button>
+      <button type="button" id="edit-cancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="{{ url_for('static', filename='common.js') }}"></script>
+<script src="{{ url_for('static', filename='shell.js') }}"></script>
+<script src="{{ url_for('static', filename='fleet.js') }}"></script>
+</body>
+</html>

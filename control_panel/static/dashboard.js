@@ -1,6 +1,5 @@
 "use strict";
 
-const IS_ADMIN = window.PANEL_ROLE === "admin";
 const LIVE_REFRESH_MS =
   Number((document.querySelector("main") || {}).dataset?.refreshMs) || 1000;
 
@@ -15,7 +14,6 @@ const state = {
 
 async function loadRobots() {
   state.robots = await get("/api/robots");
-  renderRobots();
   const stillSelected = state.robots.some(
     (r) => String(r.id) === String(state.selectedId)
   );
@@ -25,9 +23,24 @@ async function loadRobots() {
     $("#robot-controls").hidden = true;
     renderAccountQueue();
   }
+  renderRobotPicker();
+  updateSelectedMeta();
+  updateDeckState();
   if (state.selectedId) await refreshSelected();
   else renderKpis();
   refreshLive();
+}
+
+function updateSelectedMeta() {
+  const robot = selectedRobot();
+  const name = $("#selected-name");
+  const status = $("#selected-status");
+  if (name) name.textContent = robot ? robot.name : "";
+  if (status) {
+    status.textContent = robot
+      ? `now: ${robot.current_account || "-"}  |  next: ${robot.next_account || "-"}`
+      : "";
+  }
 }
 
 function renderRobotPicker() {
@@ -189,55 +202,6 @@ function renderAccountQueue() {
   syncScrapeButton();
 }
 
-function renderRobots() {
-  const tbody = $("#robots-table tbody");
-  tbody.innerHTML = "";
-  for (const r of state.robots) {
-    const tr = document.createElement("tr");
-    if (String(r.id) === String(state.selectedId)) tr.classList.add("selected");
-
-    let statusText = "offline";
-    let statusCls = "bad";
-    if (r.online) {
-      statusCls = r.auth_error ? "warn" : "ok";
-      statusText = r.auth_error ? "auth failed" : "online";
-    }
-    const proxy =
-      r.default_proxy_ip && r.default_proxy_port
-        ? `${r.default_proxy_ip}:${r.default_proxy_port}`
-        : "";
-
-    tr.innerHTML = `
-      <td>${esc(r.name)}</td>
-      <td>${esc(r.host)}:${esc(String(r.port))}</td>
-      <td class="${statusCls}">${esc(statusText)}</td>
-      <td>${r.running ? "running" : "stopped"}</td>
-      <td>${r.pid == null ? "" : esc(String(r.pid))}</td>
-      <td>${esc(proxy)}</td>
-      <td>
-        <button data-act="select" data-id="${r.id}">Select</button>
-        <button data-act="start" data-id="${r.id}">Start</button>
-        <button data-act="stop" data-id="${r.id}">Stop</button>
-        ${
-          IS_ADMIN
-            ? `<button data-act="edit" data-id="${r.id}">Edit</button>
-        <button data-act="delete" data-id="${r.id}">Delete</button>`
-            : ""
-        }
-      </td>`;
-    tbody.appendChild(tr);
-  }
-
-  const sel = state.robots.find((x) => String(x.id) === String(state.selectedId));
-  if (sel) {
-    $("#selected-name").textContent = sel.name;
-    $("#selected-status").textContent = `now: ${sel.current_account || "-"}  |  next: ${sel.next_account || "-"}`;
-  }
-  renderRobotPicker();
-  updateDeckState();
-  renderKpis();
-}
-
 async function refreshSelected() {
   if (!state.selectedId) return;
   await Promise.all([loadAccounts(), loadLogIfAuto()]);
@@ -327,7 +291,8 @@ async function selectRobot(id) {
   $("#log-title").textContent = "Log - " + r.name;
   const picker = $("#robot-picker");
   if (picker) picker.value = String(id);
-  renderRobots();
+  updateSelectedMeta();
+  updateDeckState();
   await refreshSelected();
 }
 
@@ -348,8 +313,12 @@ function clearSelection() {
   if (picker) picker.value = "";
   const selectedName = $("#selected-name");
   if (selectedName) selectedName.textContent = "";
+  const selectedStatus = $("#selected-status");
+  if (selectedStatus) selectedStatus.textContent = "";
   renderAccountQueue();
-  renderRobots();
+  renderRobotPicker();
+  updateDeckState();
+  renderKpis();
 }
 
 async function startRobot() {
@@ -542,80 +511,15 @@ async function loadProxyOptions() {
         `<option value="${p.id}">${esc(String(p.ip) + ":" + String(p.port))}${p.note ? " (" + esc(p.note) + ")" : ""}</option>`
     )
     .join("");
-  document.querySelectorAll(".proxy-select").forEach((sel) => {
-    const keep = sel.value;
-    if (sel.id === "proxy-select") {
-      // Start-time choice: Auto (fastest proxy per account) is the default;
-      // there is intentionally no "none" option - the scraper always uses a
-      // proxy.
-      sel.innerHTML =
-        '<option value="auto">Auto (fastest proxy)</option>' + proxyOptions;
-      const present = Array.from(sel.options).some((o) => o.value === keep);
-      sel.value = keep && present ? keep : "auto";
-    } else {
-      // Add/Edit robot: a default proxy for that robot, or none.
-      sel.innerHTML = '<option value="">proxy: none</option>' + proxyOptions;
-      sel.value =
-        keep && Array.from(sel.options).some((o) => o.value === keep)
-          ? keep
-          : "";
-    }
-  });
-}
-
-function openEdit(id) {
-  const r = state.robots.find((x) => String(x.id) === String(id));
-  if (!r) return;
-  const form = $("#edit-form");
-  form.id.value = r.id;
-  form.name.value = r.name;
-  form.host.value = r.host;
-  form.port.value = r.port;
-  form.token.value = r.token || "";
-  const proxySel = form.querySelector(".proxy-select");
-  const match = (state.proxies || []).find(
-    (p) => p.ip === r.default_proxy_ip && String(p.port) === String(r.default_proxy_port || "")
-  );
-  proxySel.value = match ? String(match.id) : "";
-  $("#edit-dialog").showModal();
-}
-
-async function submitEdit(e) {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  const id = fd.get("id");
-  try {
-    await post(`/api/robots/${id}/edit`, Object.fromEntries(fd.entries()));
-  } catch (err) {
-    setStatus(err.message, true);
-  }
-  $("#edit-dialog").close();
-  await loadRobots();
-}
-
-async function submitAdd(e) {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  try {
-    await post("/api/robots", Object.fromEntries(fd.entries()));
-  } catch (err) {
-    setStatus(err.message, true);
-  }
-  e.target.reset();
-  await loadRobots();
-}
-
-function onRobotAction(e) {
-  const btn = e.target.closest("button[data-act]");
-  if (!btn) return;
-  const { act, id } = btn.dataset;
-  if (act === "select") selectRobot(id);
-  else if (act === "start") selectRobot(id).then(startRobot);
-  else if (act === "stop") post(`/api/robots/${id}/stop`).then(loadRobots);
-  else if (act === "edit" && IS_ADMIN) openEdit(id);
-  else if (act === "delete" && IS_ADMIN) {
-    if (confirm("Delete this robot?")) post(`/api/robots/${id}/delete`).then(loadRobots);
-  }
+  const sel = $("#proxy-select");
+  if (!sel) return;
+  // Start-time choice: Auto (fastest proxy per account) is the default; there
+  // is intentionally no "none" option - the scraper always uses a proxy.
+  const keep = sel.value;
+  sel.innerHTML =
+    '<option value="auto">Auto (fastest proxy)</option>' + proxyOptions;
+  const present = Array.from(sel.options).some((o) => o.value === keep);
+  sel.value = keep && present ? keep : "auto";
 }
 
 async function onAccountAction(e) {
@@ -682,9 +586,6 @@ function init() {
   $("#statement-close").addEventListener("click", () => $("#statement-dialog").close());
   $("#statement-copy").addEventListener("click", copyStatement);
   wireLiveFeed();
-  $("#edit-cancel").addEventListener("click", () => $("#edit-dialog").close());
-  $("#edit-form").addEventListener("submit", submitEdit);
-  $("#add-robot-form").addEventListener("submit", submitAdd);
 
   const robotPicker = $("#robot-picker");
   if (robotPicker) {
@@ -713,7 +614,6 @@ function init() {
     });
   }
   renderAccountQueue();
-  $("#robots-table tbody").addEventListener("click", onRobotAction);
   $("#accounts-table tbody").addEventListener("click", onAccountAction);
   $("#accounts-table tbody").addEventListener("focusin", onOmittedFocus);
   $("#accounts-table tbody").addEventListener("focusout", onOmittedBlur);
@@ -725,10 +625,6 @@ function init() {
     const collapsed = panel.classList.toggle("collapsed");
     t.textContent = collapsed ? "+" : "−";
   });
-  if (!IS_ADMIN) {
-    const add = document.querySelector(".add-robot");
-    if (add) add.hidden = true;
-  }
   loadProxyOptions();
   loadRobots();
   setInterval(loadRobots, 2500);

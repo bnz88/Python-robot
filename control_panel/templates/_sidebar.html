@@ -20,6 +20,12 @@
        title="Dashboard" {% if active == 'dashboard' %}aria-current="page"{% endif %}>
       {{ icon('dashboard') }}<span>Dashboard</span>
     </a>
+    {% if user and user.role == 'admin' %}
+    <a href="{{ url_for('fleet_page') }}" class="{{ 'active' if active == 'fleet' else '' }}"
+       title="Fleet" {% if active == 'fleet' %}aria-current="page"{% endif %}>
+      {{ icon('server') }}<span>Fleet</span>
+    </a>
+    {% endif %}
     <a href="{{ url_for('accounts_page') }}" class="{{ 'active' if active == 'accounts' else '' }}"
        title="Accounts" {% if active == 'accounts' %}aria-current="page"{% endif %}>
       {{ icon('accounts') }}<span>Accounts</span>

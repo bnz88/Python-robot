@@ -272,6 +272,12 @@ def dashboard():
     )
 
 
+@app.route("/fleet")
+@auth.admin_required
+def fleet_page():
+    return render_template("fleet.html")
+
+
 @app.route("/accounts")
 @auth.login_required
 def accounts_page():
